@@ -22,7 +22,7 @@ export async function generateGhostClient(
   if (!config) throw new Error("No API key configured")
 
   // Ghost falls back to a lighter model if none is set
-  const model = config.modelId || "google/gemini-2.0-flash-lite-001"
+  const model = config.modelId || (config.provider === "ollama" ? "llama3.2" : "google/gemini-2.0-flash-lite-001")
 
   const categories = [...new Set(context.map(c => c.category).filter(Boolean))]
 
@@ -56,6 +56,7 @@ Return ONLY valid JSON:
   const MAX_GHOST_OUTPUT_TOKENS = 220
 
   const baseUrl = getBaseUrl(config)
+  const supportsResponseFormat = config.provider !== "ollama"
   const response = await fetch(`${baseUrl}/chat/completions`, {
     method: "POST",
     headers: getProviderHeaders(config),
@@ -63,7 +64,7 @@ Return ONLY valid JSON:
       model,
       max_tokens: MAX_GHOST_OUTPUT_TOKENS,
       messages: [{ role: "user", content: prompt }],
-      response_format: { type: "json_object" },
+      ...(supportsResponseFormat ? { response_format: { type: "json_object" } } : {}),
       temperature: 0.7,
     }),
   })

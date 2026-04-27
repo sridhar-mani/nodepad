@@ -289,7 +289,7 @@ export function AboutPanel({ open, onClose }: AboutPanelProps) {
                 <FolderInput className="h-4 w-4 flex-shrink-0 text-primary/70 mt-0.5" />
                 <div>
                   <p className="text-sm font-semibold text-foreground mb-0.5">Your data, locally</p>
-                  <p className="text-sm text-muted-foreground">Everything is stored in your browser's localStorage — no account, no cloud sync. Notes are sent to the AI provider of your choice (OpenRouter, OpenAI, or Z.ai) using your own API key. Nothing is stored server-side.</p>
+                  <p className="text-sm text-muted-foreground">Everything is stored in your browser's localStorage — no account, no cloud sync. Notes are sent to the AI provider of your choice (OpenRouter, OpenAI, Gemini, Z.ai, or local Ollama) using your own API key when needed. Nothing is stored server-side.</p>
                 </div>
               </div>
             </div>

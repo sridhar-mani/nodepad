@@ -12,7 +12,7 @@ export interface AIModel {
   groundingModelId?: string
 }
 
-export type AIProvider = "openrouter" | "openai" | "zai"
+export type AIProvider = "openrouter" | "openai" | "zai" | "gemini" | "ollama"
 
 export interface AIProviderPreset {
   id: AIProvider
@@ -38,11 +38,25 @@ export const AI_PROVIDER_PRESETS: AIProviderPreset[] = [
     keyPlaceholder: "sk-...",
   },
   {
+    id: "gemini",
+    label: "Google Gemini",
+    baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai",
+    keyUrl: "https://aistudio.google.com/apikey",
+    keyPlaceholder: "AIza...",
+  },
+  {
     id: "zai",
     label: "Z.ai",
     baseUrl: "https://api.z.ai/api/paas/v4",
     keyUrl: "https://z.ai/manage-apikey/apikey-list",
     keyPlaceholder: "Your Z.ai API key",
+  },
+  {
+    id: "ollama",
+    label: "Ollama (Local)",
+    baseUrl: "http://localhost:11434/v1",
+    keyUrl: "",
+    keyPlaceholder: "Optional",
   },
 ]
 
@@ -174,14 +188,38 @@ export const ZAI_MODELS: AIModel[] = [
   },
 ]
 
+export const GEMINI_MODELS: AIModel[] = [
+  {
+    id: "gemini-2.5-pro",
+    label: "Gemini 2.5 Pro",
+    shortLabel: "Gemini Pro",
+    description: "Flagship Gemini model",
+    supportsGrounding: false,
+  },
+  {
+    id: "gemini-2.5-flash",
+    label: "Gemini 2.5 Flash",
+    shortLabel: "Gemini Flash",
+    description: "Fast and efficient Gemini model",
+    supportsGrounding: false,
+  },
+]
+
+// Keep empty so UI falls back to a text input; local Ollama model names depend
+// on what each user has pulled (e.g., llama3.2, qwen2.5, mistral).
+export const OLLAMA_MODELS: AIModel[] = []
+
 export function getModelsForProvider(provider: AIProvider): AIModel[] {
   if (provider === "openai") return OPENAI_MODELS
-  if (provider === "zai")    return ZAI_MODELS
+  if (provider === "zai") return ZAI_MODELS
+  if (provider === "gemini") return GEMINI_MODELS
+  if (provider === "ollama") return OLLAMA_MODELS
   return AI_MODELS // openrouter + safe fallback for any stale localStorage value
 }
 
 export const DEFAULT_MODEL_ID = "openai/gpt-4o"
 export const DEFAULT_PROVIDER: AIProvider = "openrouter"
+const DEFAULT_OLLAMA_MODEL_ID = "llama3.2"
 
 export interface AISettings {
   apiKey: string
@@ -218,14 +256,20 @@ export interface AIConfig {
 
 export function loadAIConfig(): AIConfig | null {
   const s = loadSettings()
-  if (!s.apiKey) return null
+  const needsApiKey = s.provider !== "ollama"
+  if (needsApiKey && !s.apiKey) return null
   const models = getModelsForProvider(s.provider)
   const model = models.find(m => m.id === s.modelId)
   // Use the matched model's id if found; otherwise fall back to the first model
   // for this provider.  This handles the case where localStorage still holds an
   // OpenRouter-prefixed id (e.g. "openai/gpt-4o") after switching to OpenAI —
   // that string won't match any entry in OPENAI_MODELS so we fall back to "gpt-4o".
-  const modelId = model?.id ?? models[0]?.id ?? s.modelId ?? DEFAULT_MODEL_ID
+  let modelId = model?.id ?? models[0]?.id ?? s.modelId ?? DEFAULT_MODEL_ID
+  if (s.provider === "ollama") {
+    // Prevent stale provider-specific IDs like "openai/gpt-4o" when switching
+    // to local Ollama where models are user-defined.
+    if (!modelId || modelId.includes("/")) modelId = DEFAULT_OLLAMA_MODEL_ID
+  }
   // Z.ai does not support grounding; only openrouter and openai do
   const supportsGrounding =
     (s.provider === "openrouter" || s.provider === "openai") &&
@@ -236,14 +280,33 @@ export function loadAIConfig(): AIConfig | null {
 
 export function getBaseUrl(config: AIConfig): string {
   const custom = config.customBaseUrl?.trim()
-  return custom || getPreset(config.provider).baseUrl
+  let base = custom || getPreset(config.provider).baseUrl
+
+  // Accept shorthand local inputs like "11434" or "localhost:11434".
+  if (/^\d{2,5}$/.test(base)) base = `http://localhost:${base}`
+  if (/^(localhost|127\.0\.0\.1|0\.0\.0\.0)(:\d+)?$/i.test(base)) base = `http://${base}`
+
+  // Ollama OpenAI-compatible endpoint lives under /v1.
+  if (config.provider === "ollama") {
+    base = base.replace(/\/+$/, "")
+    if (!/\/v1$/i.test(base)) base = `${base}/v1`
+  }
+
+  return base
 }
 
 export function getProviderHeaders(config: AIConfig): Record<string, string> {
-  const base: Record<string, string> = {
-    "Content-Type": "application/json",
-    "Authorization": `Bearer ${config.apiKey}`,
+  const base: Record<string, string> = { "Content-Type": "application/json" }
+
+  if (config.provider !== "ollama" || config.apiKey) {
+    base["Authorization"] = `Bearer ${config.apiKey}`
   }
+
+  if (config.provider === "gemini" && config.apiKey) {
+    // Gemini's OpenAI-compatible endpoint accepts API keys via this header too.
+    base["x-goog-api-key"] = config.apiKey
+  }
+
   if (config.provider === "openrouter") {
     base["HTTP-Referer"] = "https://nodepad.space"
     base["X-Title"] = "nodepad"

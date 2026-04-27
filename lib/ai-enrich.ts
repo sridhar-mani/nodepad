@@ -3,6 +3,7 @@
 import { detectContentType } from "@/lib/detect-content-type"
 import { loadAIConfig, getBaseUrl, getProviderHeaders, getModelsForProvider } from "@/lib/ai-settings"
 import type { ContentType } from "@/lib/content-types"
+import { toKnowledgeSource, type KnowledgeMatch } from "@/lib/knowledge-base"
 
 // ── Provider error parser ─────────────────────────────────────────────────────
 
@@ -187,6 +188,7 @@ export interface EnrichResult {
   isUnrelated: boolean
   mergeWithIndex: number | null
   sources?: { url: string; title: string; siteName: string }[]
+  knowledgeSources?: { url: string; title: string; siteName: string }[]
 }
 
 // ── Robust JSON parsing ───────────────────────────────────────────────────────
@@ -259,6 +261,7 @@ export async function enrichBlockClient(
   context: EnrichContext[],
   forcedType?: string,
   category?: string,
+  knowledgeMatches: KnowledgeMatch[] = [],
 ): Promise<EnrichResult> {
   const config = loadAIConfig()
   if (!config) throw new Error("No API key configured")
@@ -280,6 +283,7 @@ export async function enrichBlockClient(
   }
 
   const supportsJsonSchema = config.provider === "openrouter" || config.provider === "openai"
+  const supportsResponseFormat = config.provider !== "ollama"
   // gpt-*-search-preview models have known issues with strict json_schema + web_search_options;
   // fall back to json_object mode (guaranteed valid JSON, no schema enforcement)
   const useStrictSchema = supportsJsonSchema && !webSearchOptions
@@ -313,6 +317,12 @@ You have live web access. For this note type, include 1–2 real source citation
       ).join('\n')}`
     : ""
 
+  const knowledgeContext = knowledgeMatches.length > 0
+    ? `\n\n## Knowledge Base Context\nUse the following uploaded internal documents as high-priority context when relevant.\nIf you rely on them, mention the document title naturally in the annotation.\n${knowledgeMatches.map((m, i) =>
+      `<knowledge_chunk index="${i}" doc_id="${m.docId}" chunk_id="${m.chunkId}" title="${m.docTitle.replace(/"/g, "")}" score="${m.score.toFixed(3)}">${m.snippet.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</knowledge_chunk>`
+    ).join("\n")}`
+    : ""
+
   // URL prefetch (reference type only) — still server-assisted for CORS bypass
   let urlContext = ""
   const isUrl = /^https?:\/\//i.test(text.trim())
@@ -339,7 +349,7 @@ You have live web access. For this note type, include 1–2 real source citation
   const safeText = text.replace(/</g, '&lt;').replace(/>/g, '&gt;')
   const language = detectScript(text)
   const langDirective = `[RESPOND IN: ${language}]\n`
-  const userMessage = `${langDirective}<note_to_enrich>${safeText}</note_to_enrich>${urlContext}${categoryContext}${forcedTypeContext}${globalContext}`
+  const userMessage = `${langDirective}<note_to_enrich>${safeText}</note_to_enrich>${urlContext}${categoryContext}${forcedTypeContext}${globalContext}${knowledgeContext}`
 
   // Cap output tokens: prevents OpenRouter from using a high provider default
   // (e.g. 16384) that exceeds low-credit/free-tier balances and triggers 402.
@@ -362,9 +372,13 @@ You have live web access. For this note type, include 1–2 real source citation
       // in the system prompt to get structured JSON output.
       ...(webSearchOptions === undefined
         ? {
-            response_format: useStrictSchema
-              ? { type: "json_schema", json_schema: JSON_SCHEMA }
-              : { type: "json_object" },
+            ...(supportsResponseFormat
+              ? {
+                  response_format: useStrictSchema
+                    ? { type: "json_schema", json_schema: JSON_SCHEMA }
+                    : { type: "json_object" },
+                }
+              : {}),
             temperature: 0.1,
           }
         : { web_search_options: webSearchOptions }),
@@ -419,6 +433,13 @@ You have live web access. For this note type, include 1–2 real source citation
     })
 
   if (sources.length > 0) result.sources = sources
+
+  if (knowledgeMatches.length > 0) {
+    const strongMatches = knowledgeMatches.filter(m => m.score >= 0.08).slice(0, 3)
+    if (strongMatches.length > 0) {
+      result.knowledgeSources = strongMatches.map(toKnowledgeSource)
+    }
+  }
 
   return result
 }
