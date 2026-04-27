@@ -17,6 +17,7 @@ interface KanbanAreaProps {
   onChangeType: (id: string, newType: import("@/lib/content-types").ContentType) => void
   onToggleCollapse: (id: string) => void
   onTogglePin: (id: string) => void
+  onToggleGroundTruth: (id: string) => void
   onToggleSubTask: (id: string, subTaskId: string) => void
   onDeleteSubTask: (id: string, subTaskId: string) => void
   collapsedIds: Set<string>
@@ -31,6 +32,7 @@ export function KanbanArea({
   onChangeType,
   onToggleCollapse,
   onTogglePin,
+  onToggleGroundTruth,
   onToggleSubTask,
   onDeleteSubTask,
   collapsedIds,
@@ -156,6 +158,8 @@ export function KanbanArea({
                         onReEnrich={onReEnrich}
                         onChangeType={onChangeType}
                         onToggleCollapse={onToggleCollapse}
+                        onTogglePin={onTogglePin}
+                        onToggleGroundTruth={onToggleGroundTruth}
                         onToggleSubTask={onToggleSubTask}
                         onDeleteSubTask={onDeleteSubTask}
                         onConnectionHover={handleConnectionHover}

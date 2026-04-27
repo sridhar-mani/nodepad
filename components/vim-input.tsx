@@ -5,10 +5,47 @@ import { motion, AnimatePresence } from "framer-motion"
 import {
   Trello, Grid, Trash2, Clipboard, Download,
   FolderOpen, FolderPlus, BookOpen, Sparkles,
-  FolderDown, FolderInput, GitFork
+  FolderDown, FolderInput, GitFork, Mic, MicOff, ImagePlus, FileText
 } from "lucide-react"
 import { Command } from "cmdk"
 import { useModKey } from "@/lib/utils"
+
+async function imageFileToOptimizedDataUrl(file: File): Promise<string> {
+  const objectUrl = URL.createObjectURL(file)
+  try {
+    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const i = new Image()
+      i.onload = () => resolve(i)
+      i.onerror = () => reject(new Error("Could not load image"))
+      i.src = objectUrl
+    })
+
+    const maxDim = 1400
+    const scale = Math.min(1, maxDim / Math.max(img.width, img.height))
+    const w = Math.max(1, Math.round(img.width * scale))
+    const h = Math.max(1, Math.round(img.height * scale))
+
+    const canvas = document.createElement("canvas")
+    canvas.width = w
+    canvas.height = h
+    const ctx = canvas.getContext("2d")
+    if (!ctx) throw new Error("Canvas not available")
+
+    ctx.drawImage(img, 0, 0, w, h)
+
+    // First pass: visually lossless JPEG for photos and most screenshots.
+    let out = canvas.toDataURL("image/jpeg", 0.86)
+
+    // Second pass if still large (roughly >1.6MB as a data URL string).
+    if (out.length > 1_600_000) {
+      out = canvas.toDataURL("image/jpeg", 0.72)
+    }
+
+    return out
+  } finally {
+    URL.revokeObjectURL(objectUrl)
+  }
+}
 
 const ACTION_ITEMS = [
   { id: "export-nodepad", icon: FolderDown,  label: "Export",  sub: ".nodepad"  },
@@ -22,6 +59,8 @@ const ACTION_ITEMS = [
 
 interface VimInputProps {
   onSubmit: (text: string) => void
+  onSubmitReferenceImage: (imageDataUrl: string, fileName: string) => void
+  onSubmitKnowledgeFiles: (files: File[]) => void
   onCommand: (cmd: string, text?: string) => void
   isCommandKOpen: boolean
   setIsCommandKOpen: (open: boolean) => void
@@ -29,15 +68,20 @@ interface VimInputProps {
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
-export function VimInput({ onSubmit, onCommand, isCommandKOpen, setIsCommandKOpen }: VimInputProps) {
+export function VimInput({ onSubmit, onSubmitReferenceImage, onSubmitKnowledgeFiles, onCommand, isCommandKOpen, setIsCommandKOpen }: VimInputProps) {
   const [value, setValue] = React.useState("")
   const [search, setSearch] = React.useState("")
   const [focusedIdx, setFocusedIdx] = React.useState(0)
+  const [isListening, setIsListening] = React.useState(false)
+  const [speechSupported, setSpeechSupported] = React.useState(false)
   const mod = useModKey()
 
   const mainInputRef = React.useRef<HTMLInputElement>(null)
   const searchInputRef = React.useRef<HTMLInputElement>(null)
+  const imageInputRef = React.useRef<HTMLInputElement>(null)
+  const knowledgeInputRef = React.useRef<HTMLInputElement>(null)
   const itemRefs = React.useRef<(HTMLButtonElement | null)[]>([])
+  const recognitionRef = React.useRef<any>(null)
 
   // ── Items (mod-key aware) ───────────────────────────────────────────────
 
@@ -92,6 +136,40 @@ export function VimInput({ onSubmit, onCommand, isCommandKOpen, setIsCommandKOpe
 
   React.useEffect(() => { setFocusedIdx(0) }, [search])
 
+  React.useEffect(() => {
+    if (typeof window === "undefined") return
+    const SpeechRecognitionCtor =
+      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+    if (!SpeechRecognitionCtor) return
+
+    setSpeechSupported(true)
+    const recognition = new SpeechRecognitionCtor()
+    recognition.continuous = true
+    recognition.interimResults = true
+    recognition.lang = "en-US"
+
+    recognition.onresult = (event: any) => {
+      let finalTranscript = ""
+      for (let i = event.resultIndex; i < event.results.length; i += 1) {
+        const result = event.results[i]
+        if (result.isFinal) finalTranscript += result[0].transcript
+      }
+      if (finalTranscript.trim()) {
+        setValue(prev => `${prev}${prev ? " " : ""}${finalTranscript.trim()}`)
+      }
+    }
+
+    recognition.onend = () => setIsListening(false)
+    recognition.onerror = () => setIsListening(false)
+
+    recognitionRef.current = recognition
+
+    return () => {
+      try { recognition.stop() } catch { /* no-op */ }
+      recognitionRef.current = null
+    }
+  }, [])
+
   // Scroll focused item into view
   React.useEffect(() => {
     itemRefs.current[focusedIdx]?.scrollIntoView({ block: "nearest", behavior: "smooth" })
@@ -109,6 +187,50 @@ export function VimInput({ onSubmit, onCommand, isCommandKOpen, setIsCommandKOpe
     setSearch("")
     close()
   }, [onCommand, value, close])
+
+  const toggleDictation = React.useCallback(() => {
+    const recognition = recognitionRef.current
+    if (!recognition) return
+
+    if (isListening) {
+      try { recognition.stop() } catch { /* no-op */ }
+      setIsListening(false)
+      return
+    }
+
+    try {
+      recognition.start()
+      setIsListening(true)
+    } catch {
+      setIsListening(false)
+    }
+  }, [isListening])
+
+  const handleImagePick = React.useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    if (!file.type.startsWith("image/")) {
+      e.target.value = ""
+      return
+    }
+
+    imageFileToOptimizedDataUrl(file)
+      .then(dataUrl => {
+        if (!dataUrl.startsWith("data:image/")) return
+        onSubmitReferenceImage(dataUrl, file.name)
+      })
+      .catch(() => {
+        // Ignore file conversion failures; user can retry with a different image.
+      })
+    e.target.value = ""
+  }, [onSubmitReferenceImage])
+
+  const handleKnowledgePick = React.useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files ?? [])
+    if (files.length > 0) onSubmitKnowledgeFiles(files)
+    e.target.value = ""
+  }, [onSubmitKnowledgeFiles])
 
   // ── Grid keyboard navigation ─────────────────────────────────────────────
 
@@ -341,6 +463,21 @@ export function VimInput({ onSubmit, onCommand, isCommandKOpen, setIsCommandKOpe
         </AnimatePresence>
 
         {/* ── Main Input Bar ─────────────────────────────────────────────── */}
+        <input
+          ref={imageInputRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={handleImagePick}
+        />
+        <input
+          ref={knowledgeInputRef}
+          type="file"
+          accept=".txt,.md,.markdown,.csv,.json,.yaml,.yml,text/plain,text/markdown,text/csv,application/json"
+          multiple
+          className="hidden"
+          onChange={handleKnowledgePick}
+        />
         <div className="w-full border-t border-white/20 bg-black/80 backdrop-blur-3xl px-6 py-5 flex items-center gap-4 transition-all duration-300 focus-within:border-primary/40 relative">
           <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-primary/20 to-transparent" />
 
@@ -359,6 +496,39 @@ export function VimInput({ onSubmit, onCommand, isCommandKOpen, setIsCommandKOpe
           </div>
 
           <div className="flex items-center gap-3">
+            <button
+              onClick={() => imageInputRef.current?.click()}
+              className="flex items-center gap-1.5 rounded border border-white/10 bg-white/5 px-2 py-1 font-mono text-[9px] text-white/70 hover:bg-white/10"
+              title="Add image as reference"
+            >
+              <ImagePlus className="h-3.5 w-3.5" />
+              Image
+            </button>
+
+            <button
+              onClick={() => knowledgeInputRef.current?.click()}
+              className="flex items-center gap-1.5 rounded border border-white/10 bg-white/5 px-2 py-1 font-mono text-[9px] text-white/70 hover:bg-white/10"
+              title="Upload knowledge files"
+            >
+              <FileText className="h-3.5 w-3.5" />
+              Knowledge
+            </button>
+
+            {speechSupported && (
+              <button
+                onClick={toggleDictation}
+                className={`flex items-center gap-1.5 rounded border px-2 py-1 font-mono text-[9px] transition-colors ${
+                  isListening
+                    ? "border-primary/40 bg-primary/15 text-primary"
+                    : "border-white/10 bg-white/5 text-white/70 hover:bg-white/10"
+                }`}
+                title={isListening ? "Stop dictation" : "Start dictation"}
+              >
+                {isListening ? <MicOff className="h-3.5 w-3.5" /> : <Mic className="h-3.5 w-3.5" />}
+                {isListening ? "Listening" : "Dictate"}
+              </button>
+            )}
+
             <div className="flex items-center gap-2">
               <kbd className="flex h-5 items-center rounded border border-white/10 bg-white/5 px-1.5 font-mono text-[9px] text-white/60">
                 <span className="text-[11px] mr-1">⌘</span>

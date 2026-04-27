@@ -29,6 +29,7 @@ interface GraphAreaProps {
   onReEnrich:       (id: string) => void
   onChangeType:     (id: string, newType: import("@/lib/content-types").ContentType) => void
   onTogglePin:      (id: string) => void
+  onToggleGroundTruth: (id: string) => void
   onEdit:           (id: string, text: string) => void
   onEditAnnotation: (id: string, annotation: string) => void
   highlightedBlockId?: string | null
@@ -179,6 +180,7 @@ export function GraphArea({
   onReEnrich,
   onChangeType,
   onTogglePin,
+  onToggleGroundTruth,
   onEdit,
   onEditAnnotation,
   highlightedBlockId,
@@ -772,6 +774,7 @@ export function GraphArea({
             onReEnrich={onReEnrich}
             onChangeType={onChangeType}
             onTogglePin={onTogglePin}
+            onToggleGroundTruth={onToggleGroundTruth}
             onEdit={onEdit}
             onEditAnnotation={onEditAnnotation}
           />

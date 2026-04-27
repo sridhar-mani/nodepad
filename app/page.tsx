@@ -19,9 +19,25 @@ import { generateGhostClient } from "@/lib/ai-ghost"
 import { exportToMarkdown, downloadMarkdown, copyToClipboard } from "@/lib/export"
 import { downloadNodepadFile, parseNodepadFile, NodepadParseError } from "@/lib/nodepad-format"
 import { detectContentType } from "@/lib/detect-content-type"
+import {
+  buildKnowledgeDocumentFromFile,
+  findKnowledgeMatches,
+  isLikelyTextFile,
+  mergeKnowledgeDocs,
+  type KnowledgeDocument,
+} from "@/lib/knowledge-base"
 
 function generateId() {
   return Math.random().toString(36).substring(2, 10)
+}
+
+function isKnowledgeLikeInput(text: string, type?: ContentType): boolean {
+  if (type === "reference" || type === "definition") return true
+  const trimmed = text.trim()
+  if (/^https?:\/\//i.test(trimmed)) return true
+  if (/^kb:\/\//i.test(trimmed)) return true
+  if (/^!\[[^\]]*\]\(data:image\//i.test(trimmed)) return true
+  return false
 }
 
 export interface Project {
@@ -30,6 +46,7 @@ export interface Project {
   blocks: TextBlock[]
   collapsedIds: string[]
   ghostNotes: GhostNote[]
+  knowledgeDocuments?: KnowledgeDocument[]
   lastGhostBlockCount?: number
   lastGhostTimestamp?: number
   /** Texts of recently generated ghost notes — passed back to the API to prevent near-duplicates */
@@ -385,12 +402,25 @@ export default function Page() {
       }))
       .slice(-15)
 
+    const groundTruthNotes = targetProject.blocks
+      .filter(b => b.id !== id && b.isGroundTruth)
+      .map(b => ({ id: b.id, text: b.text, category: b.category }))
+      .slice(-8)
+
+    const knowledgeMatches = findKnowledgeMatches(
+      text,
+      targetProject.knowledgeDocuments ?? [],
+      4,
+    )
+
     try {
       const data = await enrichBlockClient(
         text,
         context.map(({ id, ...rest }) => ({ id, ...rest })),
         forcedType,
         category,
+        knowledgeMatches,
+        groundTruthNotes,
       )
 
       // Map indices back to stable block IDs — the context array carries
@@ -422,7 +452,12 @@ export default function Page() {
                   confidence: data.confidence,
                   influencedBy,
                   isUnrelated: data.isUnrelated,
-                  sources: data.sources ?? undefined,
+                  sources: [...(data.sources ?? []), ...(data.knowledgeSources ?? [])],
+                  isGroundTruth:
+                    b.isGroundTruth ||
+                    data.contentType === "reference" ||
+                    data.contentType === "definition" ||
+                    ((data.knowledgeSources?.length ?? 0) > 0),
                   isEnriching: false,
                   statusText: undefined,
                   isError: false,
@@ -481,7 +516,12 @@ export default function Page() {
               confidence: data.confidence,
               influencedBy,
               isUnrelated: data.isUnrelated,
-              sources: data.sources ?? undefined,
+              sources: [...(data.sources ?? []), ...(data.knowledgeSources ?? [])],
+              isGroundTruth:
+                b.isGroundTruth ||
+                data.contentType === "reference" ||
+                data.contentType === "definition" ||
+                ((data.knowledgeSources?.length ?? 0) > 0),
               isEnriching: false,
               statusText: undefined,
               isError: false,
@@ -596,6 +636,7 @@ export default function Page() {
       // avoid a jarring double-classification jump in the UI.
       const initialDisplayType: ContentType = resolvedType
         ?? (HIGH_CONFIDENCE_TYPES.has(heuristicType) ? heuristicType : "general")
+      const autoGroundTruth = isKnowledgeLikeInput(resolvedText, resolvedType ?? heuristicType)
 
       pushHistory(activeProjectId, blocksRef.current)
       updateActiveProject(p => ({
@@ -605,6 +646,7 @@ export default function Page() {
           text: resolvedText,
           timestamp: Date.now(),
           contentType: initialDisplayType,
+          isGroundTruth: autoGroundTruth,
           isEnriching: true,
         }]
       }))
@@ -614,6 +656,52 @@ export default function Page() {
     },
     [activeProjectId, pushHistory, updateActiveProject, enrichBlock]
   )
+
+  const addReferenceImageBlock = useCallback((imageDataUrl: string, fileName: string) => {
+    const refText = `![${fileName}](${imageDataUrl})\n\nImage reference: ${fileName}`
+    addBlock(refText, "reference")
+  }, [addBlock])
+
+  const addKnowledgeFiles = useCallback(async (files: File[]) => {
+    const candidates = files.filter(isLikelyTextFile)
+    if (candidates.length === 0) return
+
+    const built: KnowledgeDocument[] = []
+    for (const file of candidates) {
+      try {
+        const doc = await buildKnowledgeDocumentFromFile(file)
+        if (doc.rawText.trim()) built.push(doc)
+      } catch {
+        // Skip unreadable files; continue with the rest.
+      }
+    }
+    if (built.length === 0) return
+
+    const now = Date.now()
+    setProjects(current => current.map(p => {
+      if (p.id !== activeProjectId) return p
+
+      const mergedDocs = mergeKnowledgeDocs(p.knowledgeDocuments ?? [], built)
+      const appendedNotes: TextBlock[] = built.map((doc, idx) => ({
+        id: generateId(),
+        text: `Knowledge: ${doc.title}\n\n${doc.rawText.slice(0, 420)}${doc.rawText.length > 420 ? "…" : ""}`,
+        timestamp: now + idx,
+        contentType: "reference",
+        category: "Knowledge Base",
+        isGroundTruth: true,
+        isEnriching: false,
+        isError: false,
+        annotation: "User-supplied knowledge document. Treated as ground truth.",
+        sources: [{ url: `kb://${doc.id}`, title: doc.title, siteName: "Knowledge Base" }],
+      }))
+
+      return {
+        ...p,
+        knowledgeDocuments: mergedDocs,
+        blocks: [...p.blocks, ...appendedNotes],
+      }
+    }))
+  }, [activeProjectId])
 
   const deleteBlock = useCallback((id: string) => {
     pushHistory(activeProjectId, blocksRef.current)
@@ -691,6 +779,13 @@ export default function Page() {
     setProjects((current) => current.map(p => p.id === activeProjectId ? {
       ...p,
       blocks: p.blocks.map(b => b.id === id ? { ...b, isPinned: !b.isPinned } : b)
+    } : p))
+  }, [activeProjectId])
+
+  const handleToggleGroundTruth = useCallback((id: string) => {
+    setProjects((current) => current.map(p => p.id === activeProjectId ? {
+      ...p,
+      blocks: p.blocks.map(b => b.id === id ? { ...b, isGroundTruth: !b.isGroundTruth } : b)
     } : p))
   }, [activeProjectId])
 
@@ -911,6 +1006,7 @@ export default function Page() {
                   onChangeType={handleChangeType}
                   onToggleCollapse={toggleCollapse}
                   onTogglePin={handleTogglePin}
+                  onToggleGroundTruth={handleToggleGroundTruth}
                   onToggleSubTask={handleToggleSubTask}
                   onDeleteSubTask={handleDeleteSubTask}
                   highlightedBlockId={highlightedBlockId}
@@ -927,6 +1023,7 @@ export default function Page() {
                   onChangeType={handleChangeType}
                   onToggleCollapse={toggleCollapse}
                   onTogglePin={handleTogglePin}
+                  onToggleGroundTruth={handleToggleGroundTruth}
                   onToggleSubTask={handleToggleSubTask}
                   onDeleteSubTask={handleDeleteSubTask}
                   collapsedIds={new Set(activeProject.collapsedIds)}
@@ -940,6 +1037,7 @@ export default function Page() {
                   onReEnrich={reEnrichBlock}
                   onChangeType={handleChangeType}
                   onTogglePin={handleTogglePin}
+                  onToggleGroundTruth={handleToggleGroundTruth}
                   onEdit={editBlock}
                   onEditAnnotation={editAnnotation}
                   highlightedBlockId={highlightedBlockId}
@@ -979,6 +1077,8 @@ export default function Page() {
 
         <VimInput
           onSubmit={addBlock}
+          onSubmitReferenceImage={addReferenceImageBlock}
+          onSubmitKnowledgeFiles={addKnowledgeFiles}
           onCommand={handleCommand}
           isCommandKOpen={isCommandKOpen}
           setIsCommandKOpen={setIsCommandKOpen}

@@ -48,6 +48,7 @@ interface TilingAreaProps {
   onChangeType: (id: string, newType: import("@/lib/content-types").ContentType) => void
   onToggleCollapse: (id: string) => void
   onTogglePin: (id: string) => void
+  onToggleGroundTruth: (id: string) => void
   onToggleSubTask: (id: string, subTaskId: string) => void
   onDeleteSubTask: (id: string, subTaskId: string) => void
   highlightedBlockId?: string | null
@@ -64,6 +65,7 @@ export function TilingArea({
   onChangeType,
   onToggleCollapse,
   onTogglePin,
+  onToggleGroundTruth,
   onToggleSubTask,
   onDeleteSubTask,
   highlightedBlockId,
@@ -197,6 +199,7 @@ export function TilingArea({
               onChangeType={onChangeType}
               onToggleCollapse={onToggleCollapse}
               onTogglePin={onTogglePin}
+              onToggleGroundTruth={onToggleGroundTruth}
               onToggleSubTask={onToggleSubTask}
               onDeleteSubTask={onDeleteSubTask}
               isHighlighted={highlightedBlockId === block.id}
@@ -244,6 +247,7 @@ export function TilingArea({
               onChangeType={onChangeType}
               onToggleCollapse={onToggleCollapse}
               onTogglePin={onTogglePin}
+              onToggleGroundTruth={onToggleGroundTruth}
               onToggleSubTask={onToggleSubTask}
               onDeleteSubTask={onDeleteSubTask}
               isHighlighted={highlightedBlockId === taskBlock.id}

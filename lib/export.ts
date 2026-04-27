@@ -11,6 +11,7 @@ export interface ExportBlock {
   annotation?: string
   confidence?: number | null
   sources?: { url: string; title: string; siteName: string }[]
+  isGroundTruth?: boolean
   isPinned?: boolean
   timestamp?: number
 }
@@ -228,6 +229,7 @@ export function exportToMarkdown(projectName: string, blocks: ExportBlock[]): st
       const meta: string[] = []
       if (block.category)  meta.push(`**Category:** \`${block.category}\``)
       if (block.timestamp) meta.push(`**Added:** ${formatDate(block.timestamp)} ${formatTime(block.timestamp)}`)
+      if (block.isGroundTruth) meta.push(`**Ground Truth:** yes`)
       if (block.isPinned)  meta.push(`📌 *Pinned*`)
       if (meta.length > 0) {
         lines.push(meta.join(" · "))

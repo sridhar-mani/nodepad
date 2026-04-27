@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback, useMemo, memo } from "react"
 import { createPortal } from "react-dom"
-import { X, Check, Pin, RefreshCw, ChevronDown, ChevronRight, ChevronLeft, Link as LinkIcon, Sparkles, Tag } from "lucide-react"
+import { X, Check, Pin, RefreshCw, ChevronDown, ChevronRight, ChevronLeft, Link as LinkIcon, Sparkles, Tag, Volume2, Square, ShieldCheck } from "lucide-react"
 import { motion } from "framer-motion"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
@@ -22,6 +22,7 @@ export interface TextBlock {
   sources?: { url: string; title: string; siteName: string }[]
   influencedBy?: string[]
   isUnrelated?: boolean
+  isGroundTruth?: boolean
   isPinned?: boolean
   subTasks?: { id: string; text: string; isDone: boolean; timestamp: number }[]
 }
@@ -36,6 +37,7 @@ interface TileCardProps {
   onReEnrich: (id: string, newCategory?: string) => void
   onToggleCollapse: (id: string) => void
   onTogglePin?: (id: string) => void
+  onToggleGroundTruth?: (id: string) => void
   onToggleSubTask?: (blockId: string, subTaskId: string) => void
   onDeleteSubTask?: (blockId: string, subTaskId: string) => void
   isHighlighted?: boolean
@@ -91,6 +93,7 @@ export const TileCard = memo(function TileCard({
   onReEnrich, 
   onToggleCollapse,
   onTogglePin,
+  onToggleGroundTruth,
   onToggleSubTask,
   onDeleteSubTask,
   isHighlighted,
@@ -113,6 +116,7 @@ export const TileCard = memo(function TileCard({
   const [isFooterExpanded, setIsFooterExpanded] = useState(false)
   const [editingMinHeight, setEditingMinHeight] = useState<number | undefined>(undefined)
   const [isTypePickerOpen, setIsTypePickerOpen] = useState(false)
+  const [isSpeaking, setIsSpeaking] = useState(false)
   const [pickerRect, setPickerRect] = useState<DOMRect | null>(null)
   const typeChangeButtonRef = useRef<HTMLButtonElement>(null)
   const typePickerDropdownRef = useRef<HTMLDivElement>(null)
@@ -124,6 +128,14 @@ export const TileCard = memo(function TileCard({
   useEffect(() => {
     setIsMounted(true)
   }, [])
+
+  useEffect(() => {
+    return () => {
+      if (isSpeaking && typeof window !== "undefined" && window.speechSynthesis) {
+        window.speechSynthesis.cancel()
+      }
+    }
+  }, [isSpeaking])
 
   const formattedTime = useMemo(() => {
     if (!isMounted) return ""
@@ -241,6 +253,29 @@ export const TileCard = memo(function TileCard({
     setEditText(block.text)
     setIsEditing(true)
   }, [block.text, block.annotation, effectiveCollapsed])
+
+  const toggleSpeak = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (typeof window === "undefined" || !window.speechSynthesis) return
+
+    if (isSpeaking) {
+      window.speechSynthesis.cancel()
+      setIsSpeaking(false)
+      return
+    }
+
+    const speechText = [block.text, block.annotation].filter(Boolean).join(". ")
+    if (!speechText.trim()) return
+
+    const utterance = new SpeechSynthesisUtterance(speechText)
+    utterance.rate = 1
+    utterance.pitch = 1
+    utterance.onend = () => setIsSpeaking(false)
+    utterance.onerror = () => setIsSpeaking(false)
+    setIsSpeaking(true)
+    window.speechSynthesis.cancel()
+    window.speechSynthesis.speak(utterance)
+  }, [isSpeaking, block.text, block.annotation])
 
   const isTextRTL = useMemo(() => isRTL(block.text), [block.text])
   const isAnnotationRTL = useMemo(() => isRTL(block.annotation || ""), [block.annotation])
@@ -389,6 +424,15 @@ export const TileCard = memo(function TileCard({
               <RefreshCw className={`h-2.5 w-2.5 ${block.isEnriching ? "animate-spin opacity-50" : ""}`} />
             </button>
           )}
+          {!effectiveCollapsed && (
+            <button
+              onClick={toggleSpeak}
+              className="flex h-4 w-4 items-center justify-center rounded-sm transition-all hover:bg-black/10"
+              title={isSpeaking ? "Stop playback" : "Read note aloud"}
+            >
+              {isSpeaking ? <Square className="h-2.5 w-2.5" /> : <Volume2 className="h-2.5 w-2.5" />}
+            </button>
+          )}
           {!effectiveCollapsed && onTogglePin && (
             <button
               onClick={(e) => {
@@ -400,6 +444,19 @@ export const TileCard = memo(function TileCard({
               title={block.isPinned ? "Unpin note" : "Pin note"}
             >
               <Pin className={`h-2.5 w-2.5 transition-transform ${block.isPinned ? "fill-current" : "-rotate-45"}`} />
+            </button>
+          )}
+          {!effectiveCollapsed && onToggleGroundTruth && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                onToggleGroundTruth(block.id)
+              }}
+              className={`flex h-4 w-4 items-center justify-center rounded-sm transition-all ${block.isGroundTruth ? "bg-black/20 opacity-100 scale-110" : "opacity-40 hover:opacity-100 hover:bg-black/10"}`}
+              aria-label={block.isGroundTruth ? "Unset ground truth" : "Mark as ground truth"}
+              title={block.isGroundTruth ? "Unset ground truth" : "Mark as ground truth"}
+            >
+              <ShieldCheck className={`h-2.5 w-2.5 ${block.isGroundTruth ? "" : "opacity-80"}`} />
             </button>
           )}
           {/* Change-type button — portal dropdown, clear of tile overflow:hidden */}
@@ -658,6 +715,12 @@ export const TileCard = memo(function TileCard({
                       <span className="truncate max-w-[120px]">{block.category || "no-topic"}</span>
                     </span>
 
+                    {block.isGroundTruth && (
+                      <span className="rounded-sm px-1.5 py-0.5 font-mono text-[8px] font-black uppercase tracking-tighter bg-emerald-500/10 text-emerald-300 border border-emerald-400/30">
+                        Ground Truth
+                      </span>
+                    )}
+
                     {block.influencedBy && block.influencedBy.length > 0 && (
                       <div className="group/influences relative">
                         <div
@@ -757,6 +820,28 @@ function renderBody(
   bodyStyle: string | undefined,
   accent: string
 ) {
+  const mdImage = text.match(/^!\[([^\]]*)\]\(([^)]+)\)/m)
+  if (mdImage) {
+    const alt = mdImage[1] || "Reference image"
+    const src = mdImage[2]
+    const remainder = text.replace(mdImage[0], "").trim()
+    return (
+      <div className="flex flex-col gap-2">
+        <a href={src} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()}>
+          <img
+            src={src}
+            alt={alt}
+            className="max-h-[240px] w-auto max-w-full rounded-sm border border-white/10 object-contain"
+            loading="lazy"
+          />
+        </a>
+        {remainder ? (
+          <p className="text-xs font-mono text-muted-foreground/80">{remainder}</p>
+        ) : null}
+      </div>
+    )
+  }
+
   switch (bodyStyle) {
     case "blockquote":
       return (

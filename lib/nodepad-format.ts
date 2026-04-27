@@ -28,6 +28,7 @@ export interface NodepadBlock {
   sources?: { url: string; title: string; siteName: string }[]
   influencedBy?: string[]        // stable block IDs (not category strings)
   isUnrelated?: boolean
+  isGroundTruth?: boolean
   isPinned?: boolean
   subTasks?: { id: string; text: string; isDone: boolean; timestamp: number }[]
 }
@@ -39,6 +40,24 @@ export interface NodepadGhostNote {
   isGenerating: boolean
 }
 
+export interface NodepadKnowledgeChunk {
+  id: string
+  docId: string
+  docTitle: string
+  text: string
+}
+
+export interface NodepadKnowledgeDocument {
+  id: string
+  title: string
+  fileName: string
+  mimeType: string
+  createdAt: number
+  updatedAt: number
+  rawText: string
+  chunks: NodepadKnowledgeChunk[]
+}
+
 export interface NodepadFile {
   version: typeof NODEPAD_FILE_VERSION
   exportedAt: number
@@ -48,6 +67,7 @@ export interface NodepadFile {
     blocks: NodepadBlock[]
     collapsedIds: string[]
     ghostNotes: NodepadGhostNote[]
+    knowledgeDocuments?: NodepadKnowledgeDocument[]
     lastGhostTexts?: string[]
     lastGhostBlockCount?: number
     lastGhostTimestamp?: number
@@ -63,6 +83,7 @@ export function serialiseProject(project: {
   blocks: any[]
   collapsedIds: string[]
   ghostNotes?: any[]
+  knowledgeDocuments?: NodepadKnowledgeDocument[]
   lastGhostTexts?: string[]
   lastGhostBlockCount?: number
   lastGhostTimestamp?: number
@@ -83,6 +104,7 @@ export function serialiseProject(project: {
       lastGhostTexts: project.lastGhostTexts,
       lastGhostBlockCount: project.lastGhostBlockCount,
       lastGhostTimestamp: project.lastGhostTimestamp,
+      ...(project.knowledgeDocuments?.length ? { knowledgeDocuments: project.knowledgeDocuments } : {}),
       blocks: project.blocks.map((b: any): NodepadBlock => ({
         id:           b.id,
         text:         b.text,
@@ -94,6 +116,7 @@ export function serialiseProject(project: {
         ...(b.sources      !== undefined && { sources:     b.sources }),
         ...(b.influencedBy !== undefined && { influencedBy: b.influencedBy }),
         ...(b.isUnrelated  !== undefined && { isUnrelated:  b.isUnrelated }),
+        ...(b.isGroundTruth !== undefined && { isGroundTruth: b.isGroundTruth }),
         ...(b.isPinned                   && { isPinned:     b.isPinned }),
         ...(b.subTasks?.length           && { subTasks:     b.subTasks }),
       })),
@@ -142,6 +165,7 @@ export function parseNodepadFile(
   blocks: any[]
   collapsedIds: string[]
   ghostNotes: any[]
+  knowledgeDocuments?: NodepadKnowledgeDocument[]
   lastGhostTexts?: string[]
   lastGhostBlockCount?: number
   lastGhostTimestamp?: number
@@ -181,6 +205,7 @@ export function parseNodepadFile(
     })),
     collapsedIds: Array.isArray(src.collapsedIds) ? src.collapsedIds : [],
     ghostNotes:   Array.isArray(src.ghostNotes)   ? src.ghostNotes   : [],
+    knowledgeDocuments: Array.isArray(src.knowledgeDocuments) ? src.knowledgeDocuments : [],
     lastGhostTexts:       src.lastGhostTexts,
     lastGhostBlockCount:  src.lastGhostBlockCount,
     lastGhostTimestamp:   src.lastGhostTimestamp,

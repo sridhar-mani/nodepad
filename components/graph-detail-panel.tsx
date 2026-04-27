@@ -4,7 +4,7 @@ import * as React from "react"
 import { createPortal } from "react-dom"
 import { CONTENT_TYPE_CONFIG, type ContentType } from "@/lib/content-types"
 import type { TextBlock } from "@/components/tile-card"
-import { Link as LinkIcon, Pin, RefreshCw, Tag, X } from "lucide-react"
+import { Link as LinkIcon, Pin, RefreshCw, ShieldCheck, Tag, X } from "lucide-react"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 
@@ -60,6 +60,7 @@ interface GraphDetailPanelProps {
   onReEnrich: (id: string, newCategory?: string) => void
   onChangeType: (id: string, newType: ContentType) => void
   onTogglePin: (id: string) => void
+  onToggleGroundTruth: (id: string) => void
   onEdit: (id: string, text: string) => void
   onEditAnnotation: (id: string, annotation: string) => void
 }
@@ -72,6 +73,7 @@ export function GraphDetailPanel({
   onReEnrich,
   onChangeType,
   onTogglePin,
+  onToggleGroundTruth,
   onEdit,
   onEditAnnotation,
 }: GraphDetailPanelProps) {
@@ -211,6 +213,13 @@ export function GraphDetailPanel({
             title="Change type"
           >
             <Tag className="h-3 w-3" />
+          </button>
+          <button
+            onClick={() => onToggleGroundTruth(block.id)}
+            className={`p-1 rounded-sm transition-opacity ${block.isGroundTruth ? "opacity-100 bg-black/20" : "opacity-40 hover:opacity-90"}`}
+            title={block.isGroundTruth ? "Unset ground truth" : "Mark as ground truth"}
+          >
+            <ShieldCheck className="h-3 w-3" />
           </button>
           <button
             onClick={() => onTogglePin(block.id)}

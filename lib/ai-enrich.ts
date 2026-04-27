@@ -179,6 +179,12 @@ export interface EnrichContext {
   annotation?: string
 }
 
+export interface GroundTruthContext {
+  id: string
+  text: string
+  category?: string
+}
+
 export interface EnrichResult {
   contentType: ContentType
   category: string
@@ -262,6 +268,7 @@ export async function enrichBlockClient(
   forcedType?: string,
   category?: string,
   knowledgeMatches: KnowledgeMatch[] = [],
+  groundTruth: GroundTruthContext[] = [],
 ): Promise<EnrichResult> {
   const config = loadAIConfig()
   if (!config) throw new Error("No API key configured")
@@ -317,6 +324,12 @@ You have live web access. For this note type, include 1–2 real source citation
       ).join('\n')}`
     : ""
 
+  const groundTruthContext = groundTruth.length > 0
+    ? `\n\n## Ground Truth Notes\nThese notes are explicitly marked as ground truth by the user. Treat them as high-priority factual anchors and avoid contradicting them unless you explicitly flag a conflict.\n${groundTruth.map((g, i) =>
+      `<ground_truth_note index="${i}" id="${g.id}" category="${(g.category || "general").replace(/"/g, "")}">${g.text.substring(0, 800).replace(/</g, '&lt;').replace(/>/g, '&gt;')}</ground_truth_note>`
+    ).join("\n")}`
+    : ""
+
   const knowledgeContext = knowledgeMatches.length > 0
     ? `\n\n## Knowledge Base Context\nUse the following uploaded internal documents as high-priority context when relevant.\nIf you rely on them, mention the document title naturally in the annotation.\n${knowledgeMatches.map((m, i) =>
       `<knowledge_chunk index="${i}" doc_id="${m.docId}" chunk_id="${m.chunkId}" title="${m.docTitle.replace(/"/g, "")}" score="${m.score.toFixed(3)}">${m.snippet.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</knowledge_chunk>`
@@ -349,7 +362,7 @@ You have live web access. For this note type, include 1–2 real source citation
   const safeText = text.replace(/</g, '&lt;').replace(/>/g, '&gt;')
   const language = detectScript(text)
   const langDirective = `[RESPOND IN: ${language}]\n`
-  const userMessage = `${langDirective}<note_to_enrich>${safeText}</note_to_enrich>${urlContext}${categoryContext}${forcedTypeContext}${globalContext}${knowledgeContext}`
+  const userMessage = `${langDirective}<note_to_enrich>${safeText}</note_to_enrich>${urlContext}${categoryContext}${forcedTypeContext}${globalContext}${groundTruthContext}${knowledgeContext}`
 
   // Cap output tokens: prevents OpenRouter from using a high provider default
   // (e.g. 16384) that exceeds low-credit/free-tier balances and triggers 402.
