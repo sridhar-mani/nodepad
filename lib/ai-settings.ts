@@ -189,18 +189,111 @@ export const ZAI_MODELS: AIModel[] = [
 ]
 
 export const GEMINI_MODELS: AIModel[] = [
+  // ── Gemini 3.1 Family (Preview - Latest, April 2026) ──────────────────────
+  {
+    id: "gemini-3.1-pro",
+    label: "Gemini 3.1 Pro (Preview)",
+    shortLabel: "3.1 Pro",
+    description: "Most advanced reasoning · complex multimodal tasks · 2M context",
+    supportsGrounding: false,
+  },
+  {
+    id: "gemini-3.1-flash-lite",
+    label: "Gemini 3.1 Flash-Lite (Preview)",
+    shortLabel: "3.1 Lite",
+    description: "Most cost-efficient · massive scale · ultra-low latency",
+    supportsGrounding: false,
+  },
+
+  // ── Gemini 3 Family (Preview - Frontier Performance) ───────────────────────
+  {
+    id: "gemini-3-flash",
+    label: "Gemini 3 Flash (Preview)",
+    shortLabel: "3 Flash",
+    description: "Frontier-class performance · high-speed · low-latency tasks",
+    supportsGrounding: false,
+  },
+
+  // ── Gemini 2.5 Family (Stable - High-Capability) ──────────────────────────
   {
     id: "gemini-2.5-pro",
     label: "Gemini 2.5 Pro",
-    shortLabel: "Gemini Pro",
-    description: "Flagship Gemini model",
+    shortLabel: "2.5 Pro",
+    description: "High-capability reasoning & coding · 1M context",
     supportsGrounding: false,
   },
   {
     id: "gemini-2.5-flash",
     label: "Gemini 2.5 Flash",
-    shortLabel: "Gemini Flash",
-    description: "Fast and efficient Gemini model",
+    shortLabel: "2.5 Flash",
+    description: "Balanced performance · high-volume, fast-response · 1M context",
+    supportsGrounding: false,
+  },
+  {
+    id: "gemini-2.5-flash-lite",
+    label: "Gemini 2.5 Flash-Lite",
+    shortLabel: "2.5 Lite",
+    description: "Speed-optimized · high-throughput applications · 100K context",
+    supportsGrounding: false,
+  },
+
+  // ── Gemini 2.0 Family (Stable - Performance-Oriented) ──────────────────────
+  {
+    id: "gemini-2.0-pro",
+    label: "Gemini 2.0 Pro",
+    shortLabel: "2.0 Pro",
+    description: "High-quality reasoning · complex tasks · 1M context",
+    supportsGrounding: false,
+  },
+  {
+    id: "gemini-2.0-flash",
+    label: "Gemini 2.0 Flash",
+    shortLabel: "2.0 Flash",
+    description: "Optimized for speed · streaming support · 1M context",
+    supportsGrounding: false,
+  },
+  {
+    id: "gemini-2.0-flash-lite",
+    label: "Gemini 2.0 Flash-Lite",
+    shortLabel: "2.0 Lite",
+    description: "Minimal latency · structured output · 100K context",
+    supportsGrounding: false,
+  },
+  {
+    id: "gemini-2.0-flash-exp-0805",
+    label: "Gemini 2.0 Flash Experimental",
+    shortLabel: "2.0 Exp",
+    description: "Experimental improvements · higher accuracy · 1M context",
+    supportsGrounding: false,
+  },
+  {
+    id: "gemini-2.0-pro-exp-0801",
+    label: "Gemini 2.0 Pro Experimental",
+    shortLabel: "2.0 Pro Exp",
+    description: "Early-access pro model · cutting-edge features · 1M context",
+    supportsGrounding: false,
+  },
+
+  // ── Gemini 1.5 Family (Stable - Extended Context) ───────────────────────────
+  {
+    id: "gemini-1.5-pro",
+    label: "Gemini 1.5 Pro",
+    shortLabel: "1.5 Pro",
+    description: "Large context window · complex document analysis · 2M context",
+    supportsGrounding: false,
+  },
+  {
+    id: "gemini-1.5-flash",
+    label: "Gemini 1.5 Flash",
+    shortLabel: "1.5 Flash",
+    description: "Fast reasoning · balanced quality/speed · 1M context",
+    supportsGrounding: false,
+  },
+  {
+    id: "gemini-1.5-flash-8b",
+    label: "Gemini 1.5 Flash 8B",
+    shortLabel: "1.5 Flash 8B",
+    description: "Ultra-fast inference · cost-efficient · 1M context",
     supportsGrounding: false,
   },
 ]
