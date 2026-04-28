@@ -558,14 +558,14 @@ export default function Page() {
           timestamp: Date.now(),
           contentType: "thesis" as ContentType,
           category,
-          isEnriching: true
+          isEnriching: false,
+          annotation: "Generated synthesis from the ghost panel.",
         }],
         ghostNotes: (p.ghostNotes || []).filter(n => n.id !== id),
       }
-      enrichBlock(p.id, newId, text, category, "thesis")
       return updatedProject
     })
-  }, [activeProject, updateActiveProject, enrichBlock])
+  }, [activeProject, updateActiveProject])
 
   const dismissGhostNote = useCallback((id: string) => {
     updateActiveProject(p => ({

@@ -4,6 +4,8 @@ import { detectContentType } from "@/lib/detect-content-type"
 import { loadAIConfig, getBaseUrl, getProviderHeaders, getModelsForProvider } from "@/lib/ai-settings"
 import type { ContentType } from "@/lib/content-types"
 import { toKnowledgeSource, type KnowledgeMatch } from "@/lib/knowledge-base"
+import { tryGeminiNative, shouldFallbackToOpenAI } from "@/lib/ai-gemini-native"
+import type { AIConfig } from "@/lib/ai-settings"
 
 // ── Provider error parser ─────────────────────────────────────────────────────
 
@@ -260,6 +262,63 @@ function parseEnrichResult(content: string): EnrichResult | null {
   }
 }
 
+// ── OpenAI-compatible API call (used as fallback or primary for non-Gemini) ────
+
+async function callOpenAICompatibleAPI(
+  baseUrl: string,
+  headers: Record<string, string>,
+  model: string,
+  messages: Array<{ role: "system" | "user"; content: string }>,
+  webSearchOptions?: Record<string, unknown>,
+  useStrictSchema?: boolean,
+  supportsResponseFormat?: boolean,
+): Promise<string> {
+  const MAX_ENRICH_OUTPUT_TOKENS = 1200
+
+  const response = await fetch(`${baseUrl}/chat/completions`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      model,
+      max_tokens: MAX_ENRICH_OUTPUT_TOKENS,
+      messages,
+      // OpenAI search-preview models reject both response_format AND temperature;
+      // when web_search_options is present, omit both and rely on the schemaHint
+      // in the system prompt to get structured JSON output.
+      ...(webSearchOptions === undefined
+        ? {
+            ...(supportsResponseFormat
+              ? {
+                  response_format: useStrictSchema
+                    ? { type: "json_schema", json_schema: JSON_SCHEMA }
+                    : { type: "json_object" },
+                }
+              : {}),
+            temperature: 0.1,
+          }
+        : { web_search_options: webSearchOptions }),
+    }),
+  })
+
+  if (!response.ok) {
+    throw new Error(await parseProviderError(response))
+  }
+
+  let data: Record<string, unknown>
+  try {
+    data = await response.json()
+  } catch {
+    throw new Error(
+      `AI enrich error: response was not valid JSON. The provider may have timed out or returned a truncated response.`
+    )
+  }
+
+  const content = (data.choices as Array<{ message?: { content?: string } }>)?.[0]?.message?.content
+  if (!content) throw new Error("No content in AI response")
+
+  return content
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 
 export async function enrichBlockClient(
@@ -370,55 +429,71 @@ You have live web access. For this note type, include 1–2 real source citation
   const MAX_ENRICH_OUTPUT_TOKENS = 1200
 
   const baseUrl = getBaseUrl(config)
-  const response = await fetch(`${baseUrl}/chat/completions`, {
-    method: "POST",
-    headers: getProviderHeaders(config),
-    body: JSON.stringify({
+  const headers = getProviderHeaders(config)
+  const messages = [
+    { role: "system" as const, content: systemPrompt },
+    { role: "user" as const, content: userMessage },
+  ]
+
+  let content: string
+
+  // ── Try Gemini native SDK first if provider is Gemini ────────────────────────
+  if (config.provider === "gemini") {
+    const geminiResult = await tryGeminiNative(
+      config,
+      systemPrompt,
+      userMessage,
+      useStrictSchema ? JSON_SCHEMA.schema : undefined,
+    )
+
+    if (geminiResult.success) {
+      content = geminiResult.response
+    } else {
+      // Gemini native failed; log and decide whether to fallback
+      console.warn("Gemini native SDK failed:", geminiResult.error.message)
+
+      if (shouldFallbackToOpenAI(geminiResult.error)) {
+        // Recoverable error (auth, rate limit, etc.) — fall back to OpenAI-compatible endpoint
+        console.info("Falling back to Gemini OpenAI-compatible endpoint")
+        try {
+          content = await callOpenAICompatibleAPI(
+            baseUrl,
+            headers,
+            model,
+            messages,
+            webSearchOptions,
+            useStrictSchema,
+            supportsResponseFormat,
+          )
+        } catch (fallbackError) {
+          throw new Error(
+            `Gemini native failed (${geminiResult.error.message}) and fallback also failed: ${fallbackError instanceof Error ? fallbackError.message : String(fallbackError)}`
+          )
+        }
+      } else {
+        // Non-recoverable error — bubble up
+        throw new Error(`Gemini native call failed: ${geminiResult.error.message}`)
+      }
+    }
+  } else {
+    // ── Non-Gemini providers: use OpenAI-compatible directly ─────────────────────
+    content = await callOpenAICompatibleAPI(
+      baseUrl,
+      headers,
       model,
-      max_tokens: MAX_ENRICH_OUTPUT_TOKENS,
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user",   content: userMessage },
-      ],
-      // OpenAI search-preview models reject both response_format AND temperature;
-      // when web_search_options is present, omit both and rely on the schemaHint
-      // in the system prompt to get structured JSON output.
-      ...(webSearchOptions === undefined
-        ? {
-            ...(supportsResponseFormat
-              ? {
-                  response_format: useStrictSchema
-                    ? { type: "json_schema", json_schema: JSON_SCHEMA }
-                    : { type: "json_object" },
-                }
-              : {}),
-            temperature: 0.1,
-          }
-        : { web_search_options: webSearchOptions }),
-    }),
-  })
-
-  if (!response.ok) {
-    throw new Error(await parseProviderError(response))
-  }
-
-  let data: Record<string, unknown>
-  try {
-    data = await response.json()
-  } catch {
-    throw new Error(
-      `AI enrich error (${config.provider}): response was not valid JSON. The provider may have timed out or returned a truncated response.`
+      messages,
+      webSearchOptions,
+      useStrictSchema,
+      supportsResponseFormat,
     )
   }
 
-  const content = (data.choices as Array<{ message?: { content?: string } }>)?.[0]?.message?.content
   if (!content) throw new Error("No content in AI response")
 
   const result = parseEnrichResult(content)
   if (!result) {
-    const finishReason = (data.choices as Array<{ finish_reason?: string }>)?.[0]?.finish_reason
     throw new Error(
-      `AI returned unparseable JSON.${finishReason ? ` Finish reason: ${finishReason}.` : ""} Raw: ${content.substring(0, 200)}`
+      `AI returned unparseable JSON. Raw: ${content.substring(0, 200)}`
     )
   }
   if (result.confidence != null) {
