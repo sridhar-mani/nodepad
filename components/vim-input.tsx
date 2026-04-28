@@ -81,7 +81,7 @@ export function VimInput({ onSubmit, onSubmitReferenceImage, onSubmitKnowledgeFi
   const imageInputRef = React.useRef<HTMLInputElement>(null)
   const knowledgeInputRef = React.useRef<HTMLInputElement>(null)
   const itemRefs = React.useRef<(HTMLButtonElement | null)[]>([])
-  const recognitionRef = React.useRef<any>(null)
+  const recognitionRef = React.useRef<unknown>(null)
 
   // ── Items (mod-key aware) ───────────────────────────────────────────────
 
@@ -150,8 +150,8 @@ export function VimInput({ onSubmit, onSubmitReferenceImage, onSubmitKnowledgeFi
 
     recognition.onresult = (event: any) => {
       let finalTranscript = ""
-      for (let i = event.resultIndex; i < event.results.length; i += 1) {
-        const result = event.results[i]
+      for (let i = (event as any).resultIndex; i < (event as any).results.length; i += 1) {
+        const result = (event as any).results[i]
         if (result.isFinal) finalTranscript += result[0].transcript
       }
       if (finalTranscript.trim()) {

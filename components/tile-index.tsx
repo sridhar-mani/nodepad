@@ -72,9 +72,9 @@ export function TileIndex({ blocks, onHighlight, highlightedId, onClose, isOpen,
         opacity: isOpen ? 1 : 0,
         visibility: isOpen ? "visible" : "hidden"
       }}
-      className="flex flex-col h-full bg-black/20 backdrop-blur-3xl border-l border-border shrink-0 overflow-hidden relative z-50 transition-all duration-200 ease-in-out"
+      className="fixed inset-y-0 right-0 z-50 flex flex-col h-[100dvh] w-[min(88vw,18rem)] bg-black/20 backdrop-blur-3xl border-l border-border shrink-0 overflow-hidden transition-all duration-200 ease-in-out md:static md:h-full md:w-auto"
     >
-      <div className="w-[240px] flex flex-col h-full">
+      <div className="w-full md:w-[240px] flex flex-col h-full">
         {/* Header */}
         <div className="flex h-10 items-center justify-between border-b border-border bg-card/5 backdrop-blur-md px-3 py-1.5 shrink-0">
           {onClose && (

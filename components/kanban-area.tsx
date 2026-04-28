@@ -114,7 +114,7 @@ export function KanbanArea({
       {/* Scrollable Container */}
       <div 
         ref={containerRef}
-        className="flex h-full w-full overflow-x-auto custom-scrollbar p-6 pb-6 gap-8"
+        className="flex h-full w-full overflow-x-auto custom-scrollbar p-3 pb-4 gap-4 sm:p-6 sm:pb-6 sm:gap-8"
       >
         <AnimatePresence mode="popLayout">
           {columns.map(([key, col]) => (
@@ -125,7 +125,7 @@ export function KanbanArea({
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: -20 }}
-              className="flex flex-col w-96 shrink-0 h-full max-h-full pb-2"
+              className="flex flex-col w-[84vw] sm:w-96 shrink-0 h-full max-h-full pb-2"
             >
               {/* Column Header */}
               <div className="flex items-center justify-between px-2 py-1 border-b border-border/40">

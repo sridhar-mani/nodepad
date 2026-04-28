@@ -31,7 +31,7 @@ import {
 interface Project {
   id: string
   name: string
-  blocks: any[]
+  blocks: unknown[]
   collapsedIds: string[]
 }
 
@@ -142,9 +142,9 @@ export function ProjectSidebar({
         opacity: isOpen ? 1 : 0,
         visibility: isOpen ? "visible" : "hidden"
       }}
-      className="relative z-50 transition-all duration-200 ease-in-out overflow-hidden border-r border-border bg-black/20 backdrop-blur-3xl flex flex-col h-full"
+      className="fixed inset-y-0 left-0 z-50 transition-all duration-200 ease-in-out overflow-hidden border-r border-border bg-black/20 backdrop-blur-3xl flex flex-col h-[100dvh] w-[min(88vw,18rem)] md:static md:h-full md:w-auto"
     >
-      <div className="w-[240px] flex flex-col h-full">
+      <div className="w-full md:w-[240px] flex flex-col h-full">
         {/* Header */}
         <div className="flex h-10 items-center justify-between border-b border-border bg-card/5 backdrop-blur-md px-3 py-1.5 shrink-0">
           <div className="flex items-center gap-2.5">

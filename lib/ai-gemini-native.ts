@@ -57,20 +57,19 @@ export async function callGeminiNative(
       { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
       { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
       { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
-      { category: HarmCategory.HARM_CATEGORY_CIVIC_INTEGRITY, threshold: HarmBlockThreshold.BLOCK_NONE },
     ],
   })
 
   // Prepare generation config with structured output if schema provided
-  const generationConfig: Record<string, unknown> = {
+  const genConfig: { temperature: number; maxOutputTokens: number; responseMimeType?: string; responseSchema?: Record<string, unknown> } = {
     temperature: 0.1,
     maxOutputTokens: 1200,
   }
 
   // If a response schema is provided, use Gemini's JSON schema mode
   if (responseSchema) {
-    generationConfig.responseMimeType = "application/json"
-    generationConfig.responseSchema = responseSchema
+    genConfig.responseMimeType = "application/json"
+    genConfig.responseSchema = responseSchema
   }
 
   try {
@@ -81,17 +80,27 @@ export async function callGeminiNative(
           parts: [{ text: userMessage }],
         },
       ],
-      generationConfig: generationConfig as Parameters<
-        typeof model.generateContent
-      >[0]["generationConfig"],
+      generationConfig: genConfig as any,
     })
 
-    const text = response.content.parts
-      .map(part => {
-        if ("text" in part) return part.text
-        return ""
-      })
-      .join("")
+    // Extract text from response
+    let text = ""
+    try {
+      // Try the standard response structure
+      if ((response as any).text && typeof (response as any).text === "function") {
+        text = (response as any).text()
+      } else if ((response as any).response?.content?.parts) {
+        // Alternative structure
+        for (const part of (response as any).response.content.parts) {
+          if ("text" in part) {
+            text += part.text
+          }
+        }
+      }
+    } catch {
+      // If parsing fails, try to stringify and extract
+      text = String(response)
+    }
 
     if (!text) {
       throw new Error("Empty response from Gemini API")

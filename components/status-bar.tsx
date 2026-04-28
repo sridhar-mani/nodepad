@@ -73,8 +73,8 @@ export function StatusBar({
   }, [blocks])
 
   return (
-    <header className="flex h-10 items-center justify-between border-b border-border bg-card/80 backdrop-blur-md px-3 py-1.5 z-50">
-      <div className="flex items-center gap-1.5">
+    <header className="flex min-h-10 flex-wrap items-center justify-between gap-2 border-b border-border bg-card/80 px-3 py-2 backdrop-blur-md z-50 md:h-10 md:flex-nowrap md:py-1.5">
+      <div className="flex min-w-0 items-center gap-1.5">
         <button 
           onClick={onMenuClick}
           className={`p-1.5 rounded-sm transition-all duration-200 ${
@@ -86,7 +86,7 @@ export function StatusBar({
           <Menu className="h-4 w-4" />
         </button>
         
-        <div className="flex items-center gap-2.5 ml-1">
+        <div className="flex min-w-0 items-center gap-2.5 ml-1">
           <div className="flex items-center gap-0.5">
             <span className="inline-block h-2 w-2 rounded-sm bg-primary" />
             <span className="inline-block h-2 w-2 rounded-sm bg-primary/60" />
@@ -96,17 +96,17 @@ export function StatusBar({
             nodepad
           </h1>
           {activeProjectName && (
-            <div className="flex items-center gap-2 ml-1">
+            <div className="hidden min-w-0 items-center gap-2 ml-1 sm:flex">
               <span className="text-muted-foreground/20 font-mono text-[10px]">/</span>
-              <span className="font-mono text-[9px] text-muted-foreground font-bold uppercase tracking-[0.2em]">{activeProjectName}</span>
+              <span className="max-w-[8rem] truncate font-mono text-[9px] text-muted-foreground font-bold uppercase tracking-[0.2em]">{activeProjectName}</span>
             </div>
           )}
         </div>
       </div>
 
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-3 md:gap-4 flex-wrap justify-end">
         {blockCount > 0 && (
-          <div className="flex items-center gap-4">
+          <div className="hidden items-center gap-4 md:flex">
             <span className="font-mono text-[9px] text-muted-foreground/40 font-bold uppercase tracking-wider">
               {blockCount} {blockCount === 1 ? 'node' : 'nodes'}
             </span>
@@ -153,10 +153,10 @@ export function StatusBar({
             )}
           </div>
         )}
-        <div className="flex items-center gap-2 border-l border-white/5 pl-4 ml-4">
+        <div className="flex items-center gap-2 border-l border-white/5 pl-0 ml-0 sm:pl-4 sm:ml-4">
           {/* Model indicator */}
           {modelLabel && (
-            <span className="font-mono text-[9px] text-muted-foreground/60 uppercase tracking-wider px-1.5">
+            <span className="hidden font-mono text-[9px] text-muted-foreground/60 uppercase tracking-wider px-1.5 sm:inline-flex">
               {modelLabel}
             </span>
           )}

@@ -80,9 +80,9 @@ export interface NodepadFile {
 export function serialiseProject(project: {
   id: string
   name: string
-  blocks: any[]
+  blocks: unknown[]
   collapsedIds: string[]
-  ghostNotes?: any[]
+  ghostNotes?: unknown[]
   knowledgeDocuments?: NodepadKnowledgeDocument[]
   lastGhostTexts?: string[]
   lastGhostBlockCount?: number
@@ -126,8 +126,8 @@ export function serialiseProject(project: {
 
 /** Trigger a browser download of a .nodepad file for the given project. */
 export function downloadNodepadFile(project: {
-  id: string; name: string; blocks: any[]; collapsedIds: string[]
-  ghostNotes?: any[]; lastGhostTexts?: string[]
+  id: string; name: string; blocks: unknown[]; collapsedIds: string[]
+  ghostNotes?: unknown[]; lastGhostTexts?: string[]
   lastGhostBlockCount?: number; lastGhostTimestamp?: number
 }): void {
   const data = serialiseProject(project)
@@ -162,15 +162,15 @@ export function parseNodepadFile(
 ): {
   id: string
   name: string
-  blocks: any[]
+  blocks: unknown[]
   collapsedIds: string[]
-  ghostNotes: any[]
+  ghostNotes: unknown[]
   knowledgeDocuments?: NodepadKnowledgeDocument[]
   lastGhostTexts?: string[]
   lastGhostBlockCount?: number
   lastGhostTimestamp?: number
 } {
-  let data: any
+  let data: unknown
   try {
     data = JSON.parse(raw)
   } catch {
@@ -197,8 +197,8 @@ export function parseNodepadFile(
   return {
     id:           Math.random().toString(36).substring(2, 10),
     name,
-    blocks:       (src.blocks as any[]).map(b => ({
-      ...b,
+    blocks:       (src.blocks as unknown[]).map(b => ({
+      ...(b as Record<string, unknown>),
       isEnriching: false,
       isError:     false,
       statusText:  undefined,

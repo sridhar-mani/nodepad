@@ -51,14 +51,14 @@ interface TileCardProps {
 
 // Custom Markdown components for styling
 const MarkdownComponents = {
-  p: ({ children }: any) => <p className="mb-3 last:mb-0">{children}</p>,
-  ul: ({ children }: any) => <ul className="mb-3 list-disc pl-4 last:mb-0">{children}</ul>,
-  ol: ({ children }: any) => <ol className="mb-3 list-decimal pl-4 last:mb-0">{children}</ol>,
-  li: ({ children }: any) => <li className="mb-1">{children}</li>,
-  h1: ({ children }: any) => <h1 className="mb-2 text-base font-bold">{children}</h1>,
-  h2: ({ children }: any) => <h2 className="mb-2 text-base font-bold">{children}</h2>,
-  h3: ({ children }: any) => <h3 className="mb-1 text-sm font-bold">{children}</h3>,
-  a: ({ href, children }: any) => {
+  p: ({ children }: { children?: React.ReactNode }) => <p className="mb-3 last:mb-0">{children}</p>,
+  ul: ({ children }: { children?: React.ReactNode }) => <ul className="mb-3 list-disc pl-4 last:mb-0">{children}</ul>,
+  ol: ({ children }: { children?: React.ReactNode }) => <ol className="mb-3 list-decimal pl-4 last:mb-0">{children}</ol>,
+  li: ({ children }: { children?: React.ReactNode }) => <li className="mb-1">{children}</li>,
+  h1: ({ children }: { children?: React.ReactNode }) => <h1 className="mb-2 text-base font-bold">{children}</h1>,
+  h2: ({ children }: { children?: React.ReactNode }) => <h2 className="mb-2 text-base font-bold">{children}</h2>,
+  h3: ({ children }: { children?: React.ReactNode }) => <h3 className="mb-1 text-sm font-bold">{children}</h3>,
+  a: ({ href, children }: { href?: string; children?: React.ReactNode }) => {
     let displayDomain = href
     try {
       displayDomain = new URL(href).hostname.replace("www.", "")
@@ -75,7 +75,7 @@ const MarkdownComponents = {
       </a>
     )
   },
-  strong: ({ children }: any) => <strong className="font-bold text-foreground">{children}</strong>,
+  strong: ({ children }: { children?: React.ReactNode }) => <strong className="font-bold text-foreground">{children}</strong>,
 }
 
 // Simple heuristic to detect RTL text (Arabic/Hebrew)

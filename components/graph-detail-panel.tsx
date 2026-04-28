@@ -9,7 +9,7 @@ import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 
 const AnnotationMarkdownComponents = {
-  a: ({ href, children }: any) => (
+  a: ({ href, children }: { href?: string; children?: React.ReactNode }) => (
     <a
       href={href}
       target="_blank"
@@ -20,7 +20,7 @@ const AnnotationMarkdownComponents = {
       {children}
     </a>
   ),
-  p: ({ children }: any) => <span>{children}</span>,
+  p: ({ children }: { children?: React.ReactNode }) => <span>{children}</span>,
 }
 
 // Inline URL linkifier — identical logic to tile-card.tsx

@@ -274,12 +274,12 @@ export function TilingArea({
             {pageTrees.map((tree, idx) => {
               const count = chunkedPages[idx].length
               // Elastic height: if only 1 tile, don't take a whole screen
-              const heightClass = count <= 2 ? 'h-[300px]' : count <= 4 ? 'h-[60vh]' : 'h-screen'
+              const heightClass = count <= 2 ? 'h-[220px] sm:h-[300px]' : count <= 4 ? 'h-[45vh] sm:h-[60vh]' : 'h-[85dvh] sm:h-screen'
               return (
                 <div
                   key={idx}
                   data-page-idx={idx}
-                  className={`flex w-full ${heightClass} border-b border-white/5 last:border-0`}
+                  className={`flex w-full min-h-[220px] ${heightClass} border-b border-white/5 last:border-0`}
                 >
                   {renderBSPNode(tree, chunkedPages[idx])}
                 </div>

@@ -391,13 +391,12 @@ export function GraphArea({
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <div className="flex h-full w-full overflow-hidden bg-background">
+    <div className="flex h-full w-full flex-col overflow-hidden bg-background md:flex-row">
 
       {/* ── Graph canvas ─────────────────────────────────────────────────── */}
       <div
         ref={containerRef}
-        style={{ width: selectedId ? "70%" : "100%" }}
-        className="relative h-full transition-all duration-300 overflow-hidden"
+        className={`relative h-full min-h-0 transition-all duration-300 overflow-hidden ${selectedId ? "md:w-[70%]" : "w-full"}`}
       >
         {blocks.length === 0 && (
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
@@ -765,7 +764,7 @@ export function GraphArea({
 
       {/* ── Detail panel (30%) ─────────────────────────────────────────────── */}
       {selectedId && (
-        <div className="h-full overflow-hidden transition-all duration-300" style={{ width: "30%" }}>
+        <div className="h-[42vh] overflow-hidden transition-all duration-300 md:h-full md:w-[30%]">
           <GraphDetailPanel
             block={selectedBlock}
             allBlocks={blocks}
