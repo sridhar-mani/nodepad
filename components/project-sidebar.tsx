@@ -19,6 +19,7 @@ import {
   Save,
   FolderInput,
 } from "lucide-react"
+import { ThemeToggle } from './theme-toggle'
 import {
   AI_PROVIDER_PRESETS,
   getModelsForProvider,
@@ -539,6 +540,9 @@ export function ProjectSidebar({
             </div>
           ) : (
             <div className="flex flex-col gap-1.5">
+              <div className="flex items-center justify-end gap-2 mb-1">
+                <ThemeToggle />
+              </div>
               <button
                 onClick={onCreateProject}
                 className="flex items-center justify-between w-full h-8 px-2.5 rounded-sm bg-primary hover:bg-primary/90 text-primary-foreground font-mono text-[9px] font-bold uppercase tracking-[0.1em] transition-all active:scale-[0.98] shadow-sm"

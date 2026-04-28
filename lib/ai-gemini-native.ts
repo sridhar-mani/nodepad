@@ -48,11 +48,16 @@ export async function callGeminiNative(
   const model = client.getGenerativeModel({
     model: getFullModelName(config.modelId || "gemini-2.5-pro"),
     systemInstruction: systemPrompt,
+    // The API requires an explicit set of safety categories. Provide the
+    // common categories with `BLOCK_NONE` so the SDK call is accepted but
+    // still reports safety signals. See Google Generative AI docs for
+    // categories if you want to tighten thresholds later.
     safetySettings: [
-      {
-        category: HarmCategory.HARM_CATEGORY_UNSPECIFIED,
-        threshold: HarmBlockThreshold.BLOCK_NONE,
-      },
+      { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
+      { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
+      { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+      { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+      { category: HarmCategory.HARM_CATEGORY_CIVIC_INTEGRITY, threshold: HarmBlockThreshold.BLOCK_NONE },
     ],
   })
 
