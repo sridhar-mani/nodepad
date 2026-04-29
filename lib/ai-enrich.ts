@@ -272,7 +272,7 @@ async function callOpenAICompatibleAPI(
   webSearchOptions?: Record<string, unknown>,
   useStrictSchema?: boolean,
   supportsResponseFormat?: boolean,
-): Promise<string> {
+): Promise<{ content: string; annotations: Array<{ type: string; url_citation?: { url: string; title?: string } }> }> {
   const MAX_ENRICH_OUTPUT_TOKENS = 1200
 
   const response = await fetch(`${baseUrl}/chat/completions`, {
@@ -316,7 +316,13 @@ async function callOpenAICompatibleAPI(
   const content = (data.choices as Array<{ message?: { content?: string } }>)?.[0]?.message?.content
   if (!content) throw new Error("No content in AI response")
 
-  return content
+  const annotations =
+    ((data.choices as Array<{ message?: { annotations?: unknown[] } }>)?.[0]?.message?.annotations ?? []) as Array<{
+      type: string
+      url_citation?: { url: string; title?: string }
+    }>
+
+  return { content, annotations }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -436,6 +442,7 @@ You have live web access. For this note type, include 1–2 real source citation
   ]
 
   let content: string
+  let annotations: Array<{ type: string; url_citation?: { url: string; title?: string } }> = []
 
   // ── Try Gemini native SDK first if provider is Gemini ────────────────────────
   if (config.provider === "gemini") {
@@ -452,32 +459,32 @@ You have live web access. For this note type, include 1–2 real source citation
       // Gemini native failed; log and decide whether to fallback
       console.warn("Gemini native SDK failed:", geminiResult.error.message)
 
-      if (shouldFallbackToOpenAI(geminiResult.error)) {
-        // Recoverable error (auth, rate limit, etc.) — fall back to OpenAI-compatible endpoint
-        console.info("Falling back to Gemini OpenAI-compatible endpoint")
-        try {
-          content = await callOpenAICompatibleAPI(
-            baseUrl,
-            headers,
-            model,
-            messages,
-            webSearchOptions,
-            useStrictSchema,
-            supportsResponseFormat,
-          )
-        } catch (fallbackError) {
-          throw new Error(
-            `Gemini native failed (${geminiResult.error.message}) and fallback also failed: ${fallbackError instanceof Error ? fallbackError.message : String(fallbackError)}`
-          )
-        }
-      } else {
-        // Non-recoverable error — bubble up
-        throw new Error(`Gemini native call failed: ${geminiResult.error.message}`)
+      // Always attempt fallback to the OpenAI-compatible endpoint.
+      // This keeps Gemini usable even when SDK-side response parsing/shape changes.
+      if (!shouldFallbackToOpenAI(geminiResult.error)) {
+        console.info("Gemini native error not marked recoverable, but trying fallback anyway")
+      }
+      try {
+        const fallback = await callOpenAICompatibleAPI(
+          baseUrl,
+          headers,
+          model,
+          messages,
+          webSearchOptions,
+          useStrictSchema,
+          supportsResponseFormat,
+        )
+        content = fallback.content
+        annotations = fallback.annotations
+      } catch (fallbackError) {
+        throw new Error(
+          `Gemini native failed (${geminiResult.error.message}) and fallback also failed: ${fallbackError instanceof Error ? fallbackError.message : String(fallbackError)}`
+        )
       }
     }
   } else {
     // ── Non-Gemini providers: use OpenAI-compatible directly ─────────────────────
-    content = await callOpenAICompatibleAPI(
+    const openAIResult = await callOpenAICompatibleAPI(
       baseUrl,
       headers,
       model,
@@ -486,6 +493,8 @@ You have live web access. For this note type, include 1–2 real source citation
       useStrictSchema,
       supportsResponseFormat,
     )
+    content = openAIResult.content
+    annotations = openAIResult.annotations
   }
 
   if (!content) throw new Error("No content in AI response")
@@ -503,8 +512,6 @@ You have live web access. For this note type, include 1–2 real source citation
   // Extract clickable source links from response annotations.
   // Both OpenRouter :online and OpenAI search-preview return citations as
   // annotations on the message object — not inside the JSON content itself.
-  const annotations: Array<{ type: string; url_citation?: { url: string; title?: string } }> =
-    ((data.choices as Array<{ message?: { annotations?: unknown[] } }>)?.[0]?.message?.annotations ?? []) as Array<{ type: string; url_citation?: { url: string; title?: string } }>
   const seen = new Set<string>()
   const sources = annotations
     .filter(a => a.type === "url_citation" && a.url_citation?.url)

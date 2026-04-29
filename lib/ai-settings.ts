@@ -313,6 +313,9 @@ export function getModelsForProvider(provider: AIProvider): AIModel[] {
 export const DEFAULT_MODEL_ID = "openai/gpt-4o"
 export const DEFAULT_PROVIDER: AIProvider = "openrouter"
 const DEFAULT_OLLAMA_MODEL_ID = "llama3.2"
+const DEFAULT_OPENAI_MODEL_ID = "gpt-4o"
+const DEFAULT_ZAI_MODEL_ID = "glm-4.5"
+const DEFAULT_GEMINI_MODEL_ID = "gemini-2.5-pro"
 
 export interface AISettings {
   apiKey: string
@@ -347,6 +350,14 @@ export interface AIConfig {
   customBaseUrl: string
 }
 
+export function getDefaultModelForProvider(provider: AIProvider): string {
+  if (provider === "ollama") return DEFAULT_OLLAMA_MODEL_ID
+  if (provider === "openai") return OPENAI_MODELS[0]?.id ?? DEFAULT_OPENAI_MODEL_ID
+  if (provider === "zai") return ZAI_MODELS[0]?.id ?? DEFAULT_ZAI_MODEL_ID
+  if (provider === "gemini") return GEMINI_MODELS[0]?.id ?? DEFAULT_GEMINI_MODEL_ID
+  return AI_MODELS[0]?.id ?? DEFAULT_MODEL_ID
+}
+
 export function loadAIConfig(): AIConfig | null {
   const s = loadSettings()
   const needsApiKey = s.provider !== "ollama"
@@ -357,7 +368,7 @@ export function loadAIConfig(): AIConfig | null {
   // for this provider.  This handles the case where localStorage still holds an
   // OpenRouter-prefixed id (e.g. "openai/gpt-4o") after switching to OpenAI —
   // that string won't match any entry in OPENAI_MODELS so we fall back to "gpt-4o".
-  let modelId = model?.id ?? models[0]?.id ?? s.modelId ?? DEFAULT_MODEL_ID
+  let modelId = model?.id ?? models[0]?.id ?? s.modelId ?? getDefaultModelForProvider(s.provider)
   if (s.provider === "ollama") {
     // Prevent stale provider-specific IDs like "openai/gpt-4o" when switching
     // to local Ollama where models are user-defined.
@@ -449,7 +460,7 @@ export function useAISettings() {
 
   const resolvedModelId = (() => {
     const model = models.find(m => m.id === settings.modelId) || models[0]
-    if (!model) return settings.modelId
+    if (!model) return settings.modelId || getDefaultModelForProvider(settings.provider)
     if (settings.provider === "openrouter" && settings.webGrounding && model.supportsGrounding) {
       return `${model.id}:online`
     }
@@ -457,9 +468,9 @@ export function useAISettings() {
   })()
 
   const currentModel: AIModel = models.find(m => m.id === settings.modelId) || models[0] || {
-    id: settings.modelId,
-    label: settings.modelId,
-    shortLabel: settings.modelId.split("/").pop() || settings.modelId,
+    id: settings.modelId || getDefaultModelForProvider(settings.provider),
+    label: settings.modelId || getDefaultModelForProvider(settings.provider),
+    shortLabel: (settings.modelId || getDefaultModelForProvider(settings.provider)).split("/").pop() || settings.modelId,
     description: "Custom model",
     supportsGrounding: false,
   }

@@ -18,12 +18,16 @@ import {
   EyeOff,
   Save,
   FolderInput,
+  RefreshCw,
 } from "lucide-react"
 import { ThemeToggle } from './theme-toggle'
 import {
   AI_PROVIDER_PRESETS,
+  getDefaultModelForProvider,
   getModelsForProvider,
   getPreset,
+  getBaseUrl,
+  type AIModel,
   type AISettings,
   type AIProvider,
 } from "@/lib/ai-settings"
@@ -76,6 +80,9 @@ export function ProjectSidebar({
   const [providerOpen, setProviderOpen] = useState(false)
   // local draft for settings (only save on "Save")
   const [draft, setDraft] = useState<AISettings>(aiSettings)
+  const [ollamaModels, setOllamaModels] = useState<AIModel[]>([])
+  const [ollamaLoading, setOllamaLoading] = useState(false)
+  const [ollamaError, setOllamaError] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -131,9 +138,53 @@ export function ProjectSidebar({
   }
 
   const currentPreset = getPreset(draft.provider)
-  const models = getModelsForProvider(draft.provider)
+  const providerModels = getModelsForProvider(draft.provider)
+  const models = draft.provider === "ollama" && ollamaModels.length > 0 ? ollamaModels : providerModels
   const selectedModel = models.find(m => m.id === draft.modelId) || models[0] || undefined
   const isOllama = draft.provider === "ollama"
+
+  const refreshOllamaModels = async () => {
+    if (draft.provider !== "ollama") return
+    setOllamaLoading(true)
+    setOllamaError(null)
+    try {
+      const normalizedBase = getBaseUrl({
+        apiKey: draft.apiKey,
+        modelId: draft.modelId,
+        supportsGrounding: false,
+        provider: "ollama",
+        customBaseUrl: draft.customBaseUrl,
+      }).replace(/\/+$/, "")
+      const tagsBase = normalizedBase.replace(/\/v1$/i, "")
+      const res = await fetch(`${tagsBase}/api/tags`)
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const data = await res.json() as { models?: Array<{ name?: string; model?: string }> }
+      const fetched = (data.models ?? [])
+        .map((m) => m.name ?? m.model ?? "")
+        .filter(Boolean)
+        .map((name) => ({
+          id: name,
+          label: name,
+          shortLabel: name.split(":")[0],
+          description: "Installed local Ollama model",
+          supportsGrounding: false,
+        }))
+      setOllamaModels(fetched)
+      if (fetched.length > 0 && !fetched.some((m) => m.id === draft.modelId)) {
+        setDraft((d) => ({ ...d, modelId: fetched[0].id }))
+      }
+    } catch {
+      setOllamaModels([])
+      setOllamaError("Could not fetch local models from Ollama.")
+    } finally {
+      setOllamaLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    if (!showSettings || draft.provider !== "ollama") return
+    refreshOllamaModels().catch(() => {})
+  }, [showSettings, draft.provider, draft.customBaseUrl])
 
   return (
     <div
@@ -326,7 +377,7 @@ export function ProjectSidebar({
                                 setDraft(d => ({
                                   ...d,
                                   provider: preset.id,
-                                  modelId: newModels[0]?.id ?? "",
+                                  modelId: newModels[0]?.id ?? getDefaultModelForProvider(preset.id),
                                   webGrounding: d.webGrounding,
                                   customBaseUrl: "",
                                   // Restore the saved key for this provider if one exists,
@@ -408,9 +459,21 @@ export function ProjectSidebar({
 
                 {/* Model Selector */}
                 <div className="flex flex-col gap-2">
-                  <label className="font-mono text-[9px] font-bold uppercase tracking-[0.2em] text-muted-foreground">
-                    Model
-                  </label>
+                  <div className="flex items-center justify-between">
+                    <label className="font-mono text-[9px] font-bold uppercase tracking-[0.2em] text-muted-foreground">
+                      Model
+                    </label>
+                    {isOllama && (
+                      <button
+                        onClick={() => refreshOllamaModels().catch(() => {})}
+                        className="inline-flex items-center gap-1 font-mono text-[9px] text-muted-foreground hover:text-foreground transition-colors"
+                        title="Refresh local Ollama models"
+                      >
+                        <RefreshCw className={`h-3 w-3 ${ollamaLoading ? "animate-spin" : ""}`} />
+                        Refresh
+                      </button>
+                    )}
+                  </div>
                   {models.length === 0 ? (
                     <div className="flex items-center gap-2 rounded-md border border-white/10 bg-white/[0.04] px-2.5 py-2 focus-within:border-primary/50 transition-colors">
                       <input
@@ -469,6 +532,17 @@ export function ProjectSidebar({
                         )}
                       </AnimatePresence>
                     </div>
+                  )}
+                  {isOllama && (
+                    <p className="font-mono text-[9px] text-muted-foreground leading-relaxed">
+                      {ollamaLoading
+                        ? "Fetching local models from Ollama..."
+                        : ollamaError
+                          ? `${ollamaError} You can still type a model ID manually.`
+                          : ollamaModels.length > 0
+                            ? `Detected ${ollamaModels.length} local model${ollamaModels.length === 1 ? "" : "s"} from Ollama.`
+                            : "No local model list yet. Click Refresh or enter model ID manually."}
+                    </p>
                   )}
                 </div>
 
