@@ -1,53 +1,16 @@
 "use client"
 
-import { useState, useCallback } from "react"
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet"
 import { CONTENT_TYPE_CONFIG } from "@/lib/content-types"
 import {
   Sparkles, Layers, Kanban, GitFork, FolderDown,
-  FolderInput, Download, Brain, Zap, Globe, Search, Check, Mail
+  FolderInput, Download, Brain, Zap, Globe, Search
 } from "lucide-react"
 import { useModKey } from "@/lib/utils"
 
 interface AboutPanelProps {
   open: boolean
   onClose: () => void
-}
-
-function CopyEmailButton() {
-  const [copied, setCopied] = useState(false)
-
-  const handleCopy = useCallback(() => {
-    navigator.clipboard.writeText("mskayyali@me.com").then(() => {
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
-    })
-  }, [])
-
-  return (
-    <button
-      onClick={handleCopy}
-      className="inline-flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-widest border px-2 py-0.5 rounded-sm transition-all duration-300 cursor-pointer"
-      style={{
-        color:       copied ? "var(--color-emerald-400, #34d399)" : "color-mix(in oklch, var(--primary) 60%, transparent)",
-        borderColor: copied ? "color-mix(in oklch, var(--color-emerald-400, #34d399) 35%, transparent)" : "color-mix(in oklch, var(--primary) 25%, transparent)",
-      }}
-    >
-      <span className="relative flex items-center" style={{ width: "12px", height: "12px" }}>
-        <Mail
-          className="absolute inset-0 transition-all duration-300"
-          style={{ width: "12px", height: "12px", opacity: copied ? 0 : 1, transform: copied ? "scale(0.6)" : "scale(1)" }}
-        />
-        <Check
-          className="absolute inset-0 transition-all duration-300"
-          style={{ width: "12px", height: "12px", opacity: copied ? 1 : 0, transform: copied ? "scale(1)" : "scale(0.6)" }}
-        />
-      </span>
-      <span className="transition-all duration-300" style={{ opacity: copied ? 0.7 : 1 }}>
-        {copied ? "Copied!" : "Copy email"}
-      </span>
-    </button>
-  )
 }
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
@@ -120,27 +83,8 @@ export function AboutPanel({ open, onClose }: AboutPanelProps) {
           <p className="mt-2 text-xs font-mono text-primary/60 uppercase tracking-widest">
             No chat · No prompts · AI that augments your thinking
           </p>
-          <p className="mt-3 text-xs text-muted-foreground/50 flex items-center gap-3 flex-wrap">
-            <span>
-              A design experiment by{" "}
-              <a
-                href="http://mskayyali.com"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-muted-foreground/70 hover:text-foreground underline underline-offset-2 transition-colors"
-              >
-                Saleh Kayyali
-              </a>
-            </span>
-            <a
-              href="https://github.com/mskayyali/nodepad"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-widest text-muted-foreground/50 hover:text-foreground border border-white/10 hover:border-white/25 px-2 py-0.5 rounded-sm transition-colors"
-            >
-              Source code ↗
-            </a>
-            <CopyEmailButton />
+          <p className="mt-3 text-xs text-muted-foreground/50">
+            Built for focused research workflows with local-first persistence and provider-flexible AI enrichment.
           </p>
           <p className="mt-1.5 text-xs text-muted-foreground/35">
             This app uses anonymous analytics (Umami) to track feature interactions — views switched, exports, synthesis events. No note content, no personal data, no cross-site tracking.

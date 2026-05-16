@@ -385,7 +385,7 @@ export function ProjectSidebar({
                                 setDraft(d => ({
                                   ...d,
                                   provider: preset.id,
-                                  modelId: newModels[0]?.id ?? getDefaultModelForProvider(preset.id),
+                                  modelId: newModels[0]?.id ?? "",
                                   webGrounding: d.webGrounding,
                                   customBaseUrl: "",
                                   // Restore the saved key for this provider if one exists,
@@ -649,6 +649,10 @@ export function ProjectSidebar({
                       ? "Ollama local mode — no API key required"
                       : "No API key — AI disabled"}
                 </div>
+
+                <p className="font-mono text-[8px] text-muted-foreground/45 leading-relaxed">
+                  Attribution: nodepad is adapted from earlier public research-tool experiments.
+                </p>
               </motion.div>
             )}
           </AnimatePresence>
