@@ -121,6 +121,18 @@ export function ProjectSidebar({
   useEffect(() => {
     if (!showSettings) return
 
+  // Listen for external theme changes (ThemeToggle or other tabs)
+  useEffect(() => {
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === 'theme') {
+        const t = e.newValue
+        setThemeChoice(t === 'light' || t === 'dark' ? (t as 'light'|'dark') : 'system')
+      }
+    }
+    window.addEventListener('storage', onStorage)
+    return () => window.removeEventListener('storage', onStorage)
+  }, [])
+
     let cancelled = false
     const loadRegistryModels = async () => {
       setIsLoadingRegistryModels(true)
@@ -492,6 +504,30 @@ export function ProjectSidebar({
                   <p className="font-mono text-[9px] text-muted-foreground leading-relaxed">
                     Override the provider URL. You can enter full URLs or local shorthand like 11434 or localhost:11434.
                   </p>
+                </div>
+
+                {/* Theme Selector */}
+                <div className="flex flex-col gap-2">
+                  <label className="font-mono text-[9px] font-bold uppercase tracking-[0.2em] text-muted-foreground">
+                    Theme
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => { setThemeChoice('system'); applyTheme(null) }}
+                      className={`px-2 py-1 rounded-md border transition-colors ${themeChoice === 'system' ? 'bg-primary/10 border-primary text-primary' : 'bg-white/5 border-white/10 text-muted-foreground'}`}>
+                      System
+                    </button>
+                    <button
+                      onClick={() => { setThemeChoice('light'); applyTheme('light') }}
+                      className={`px-2 py-1 rounded-md border transition-colors ${themeChoice === 'light' ? 'bg-primary/10 border-primary text-primary' : 'bg-white/5 border-white/10 text-muted-foreground'}`}>
+                      Light
+                    </button>
+                    <button
+                      onClick={() => { setThemeChoice('dark'); applyTheme('dark') }}
+                      className={`px-2 py-1 rounded-md border transition-colors ${themeChoice === 'dark' ? 'bg-primary/10 border-primary text-primary' : 'bg-white/5 border-white/10 text-muted-foreground'}`}>
+                      Dark
+                    </button>
+                  </div>
                 </div>
 
                 {/* Model Selector */}

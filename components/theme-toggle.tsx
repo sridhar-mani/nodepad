@@ -13,13 +13,31 @@ export function ThemeToggle() {
         applyTheme(stored)
         setTheme(stored)
       } else {
-        // default to dark if nothing set
-        applyTheme('dark')
-        setTheme('dark')
+        // follow system preference when unset
+        const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
+        const sys = prefersDark ? 'dark' : 'light'
+        applyTheme(sys)
+        setTheme(sys)
       }
     } catch (e) {
       // ignore
     }
+  }, [])
+
+  useEffect(() => {
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === 'theme') {
+        const t = e.newValue
+        if (t === 'light' || t === 'dark') applyTheme(t)
+        else {
+          const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
+          applyTheme(prefersDark ? 'dark' : 'light')
+        }
+        setTheme(t ?? (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'))
+      }
+    }
+    window.addEventListener('storage', onStorage)
+    return () => window.removeEventListener('storage', onStorage)
   }, [])
 
   function applyTheme(t: string) {
