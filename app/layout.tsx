@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import { Geist, Geist_Mono, Vazirmatn } from 'next/font/google'
 import Script from 'next/script'
 import { MobileWall } from '@/components/mobile-wall'
+import { PWAHooks } from '@/components/pwa-hooks'
 import './globals.css'
 
 const _geist = Geist({ subsets: ["latin"] });
@@ -15,6 +16,7 @@ const vazirmatn = Vazirmatn({
 export const metadata: Metadata = {
   title: 'nodepad',
   description: 'A spatial research tool where AI augments your thinking — not replaces it.',
+  manifest: '/manifest.webmanifest',
   icons: {
     icon: [{ url: '/icon.svg', type: 'image/svg+xml' }],
     apple: '/apple-icon.png',
@@ -43,6 +45,7 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <body className={`font-sans antialiased ${vazirmatn.variable}`} suppressHydrationWarning>
         <MobileWall />
+        <PWAHooks />
         {children}
         {/* Umami analytics — nodepad.space only. Remove or replace with your
             own data-website-id if self-hosting. Safe to delete entirely. */}

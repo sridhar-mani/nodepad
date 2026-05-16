@@ -78,6 +78,7 @@ export default function Page() {
   const helpTooltipTimer = useRef<NodeJS.Timeout | null>(null)
   const { settings, updateSettings, resolvedModelId, currentModel, isHydrated } = useAISettings()
   const providerPreset = getPreset(settings.provider)
+  const aiReady = settings.provider === "ollama" || Boolean(settings.apiKey)
   const debounceTimers = useRef<Record<string, Record<string, NodeJS.Timeout>>>({})
 
   // ── Undo history ring (max 20 block snapshots per project) ───────────────
@@ -228,6 +229,9 @@ export default function Page() {
       setProjects(initialProjects)
       setActiveProjectId(initialActiveId)
       setIsLoaded(true)
+      setProjects(initialProjects)
+      setActiveProjectId(initialActiveId)
+      setIsLoaded(true)
 
       if (!localStorage.getItem("nodepad-intro-seen")) {
         setIsIntroOpen(true)
@@ -270,6 +274,29 @@ export default function Page() {
       // Quota or IndexedDB unavailability; skip silently.
     })
   }, [projects, isLoaded])
+
+  // 4. Agent checkpointing: keeps compact recoverable snapshots per project.
+  useEffect(() => {
+    if (!isLoaded || !activeProjectId) return
+    const active = projects.find((p) => p.id === activeProjectId)
+    if (!active) return
+
+    saveAgentCheckpoint(activeProjectId, {
+      activeProjectId,
+      projectName: active.name,
+      blocks: active.blocks.slice(-120),
+      collapsedIds: active.collapsedIds,
+      ghostNotes: active.ghostNotes.slice(-8),
+    }).catch(() => {})
+  }, [projects, activeProjectId, isLoaded])
+
+  // Persist user preference signals for agent memory retrieval.
+  useEffect(() => {
+    if (!isHydrated) return
+    rememberPreferenceMemory(`Preferred provider: ${settings.provider}`).catch(() => {})
+    rememberPreferenceMemory(`Preferred model: ${settings.modelId}`).catch(() => {})
+    rememberPreferenceMemory(`Web grounding: ${settings.webGrounding ? "enabled" : "disabled"}`).catch(() => {})
+  }, [isHydrated, settings.provider, settings.modelId, settings.webGrounding])
 
   // Hidden file input for .nodepad import — triggered from sidebar or ⌘K
   const importInputRef = useRef<HTMLInputElement>(null)
@@ -395,11 +422,36 @@ export default function Page() {
 
     try {
       const curated = buildGhostContext(enrichedBlocks)
-      const context = curated.map(b => ({
-        text: b.text,
-        category: b.category,
-        contentType: b.contentType,
-      }))
+      const memoryContext = await retrieveMemoriesViaLangGraph(
+        projectId,
+        curated.map((b) => b.text).join("\n"),
+        3,
+      )
+      const lettaMemories = await tryRetrieveLettaMemories(curated.map((b) => b.text).join("\n"))
+      const preferenceMemories = await retrievePreferenceMemories(2)
+
+      const context = [
+        ...curated.map(b => ({
+          text: b.text,
+          category: b.category,
+          contentType: b.contentType,
+        })),
+        ...memoryContext.map((m) => ({
+          text: `[Memory] ${m.text}`,
+          category: m.category || "Memory",
+          contentType: m.contentType,
+        })),
+        ...lettaMemories.map((m) => ({
+          text: `[Letta] ${m}`,
+          category: "Agent Memory",
+          contentType: "reference",
+        })),
+        ...preferenceMemories.map((p) => ({
+          text: `[Preference] ${p}`,
+          category: "Preference",
+          contentType: "reference",
+        })),
+      ]
 
       // Pass the last 5 generated ghost texts so the model can avoid near-duplicates
       const previousSyntheses = (targetProject.lastGhostTexts || []).slice(-5)
@@ -444,6 +496,30 @@ export default function Page() {
       }))
       .slice(-15)
 
+    const [memoryContext, preferenceMemories, lettaMemories] = await Promise.all([
+      retrieveMemoriesViaLangGraph(projectId, text, 5),
+      retrievePreferenceMemories(3),
+      tryRetrieveLettaMemories(text),
+    ])
+    const memoryAsContext = memoryContext.map((m, idx) => ({
+      id: `memory-${idx}`,
+      text: `[Memory] ${m.text}`,
+      category: m.category ?? "Memory",
+      annotation: "Retrieved from persistent memory",
+    }))
+    const preferenceAsContext = preferenceMemories.map((p, idx) => ({
+      id: `preference-${idx}`,
+      text: `[User Preference] ${p}`,
+      category: "Preference",
+      annotation: "Retrieved user style preference",
+    }))
+    const lettaAsContext = lettaMemories.map((m, idx) => ({
+      id: `letta-${idx}`,
+      text: `[Letta Memory] ${m}`,
+      category: "Agent Memory",
+      annotation: "Retrieved from Letta message memory",
+    }))
+
     const groundTruthNotes = targetProject.blocks
       .filter(b => b.id !== id && b.isGroundTruth)
       .map(b => ({ id: b.id, text: b.text, category: b.category }))
@@ -456,9 +532,10 @@ export default function Page() {
     )
 
     try {
+      const combinedContext = [...context, ...memoryAsContext, ...preferenceAsContext, ...lettaAsContext]
       const data = await enrichBlockClient(
         text,
-        context.map(({ id, ...rest }) => ({ id, ...rest })),
+        combinedContext.map(({ id, ...rest }) => ({ id, ...rest })),
         forcedType,
         category,
         knowledgeMatches,
@@ -469,13 +546,26 @@ export default function Page() {
       // the original block IDs so we get exact, rename-proof references.
       const influencedBy = data.influencedByIndices
         ? (data.influencedByIndices as number[])
-            .map((idx) => context[idx]?.id)
-            .filter(Boolean) as string[]
+            .map((idx) => combinedContext[idx]?.id)
+            .filter((v): v is string => Boolean(v) && !v.startsWith("memory-") && !v.startsWith("preference-") && !v.startsWith("letta-"))
         : []
+
+      rememberNoteMemory(projectId, {
+        text,
+        category: data.category,
+        contentType: data.contentType,
+      }).catch(() => {})
 
       setProjects((current: Project[]) => {
         const mergeTargetIdx = data.mergeWithIndex
-        const mergeTargetId = mergeTargetIdx !== null && context[mergeTargetIdx] ? context[mergeTargetIdx].id : null
+        const mergeTargetId =
+          mergeTargetIdx !== null &&
+          combinedContext[mergeTargetIdx] &&
+          !String(combinedContext[mergeTargetIdx].id).startsWith("memory-") &&
+          !String(combinedContext[mergeTargetIdx].id).startsWith("preference-") &&
+          !String(combinedContext[mergeTargetIdx].id).startsWith("letta-")
+            ? combinedContext[mergeTargetIdx].id
+            : null
 
         return current.map(proj => {
           if (proj.id !== projectId) return proj
@@ -1012,7 +1102,7 @@ export default function Page() {
           onMenuClick={() => setIsSidebarOpen(!isSidebarOpen)}
           onIndexToggle={() => setIsIndexOpen(!isIndexOpen)}
           onGhostPanelToggle={() => setIsGhostPanelOpen(prev => !prev)}
-          modelLabel={isHydrated && settings.apiKey ? currentModel.shortLabel : undefined}
+          modelLabel={isHydrated && aiReady ? currentModel.shortLabel : undefined}
           showHelpTooltip={showHelpTooltip}
           onHelpTooltipDismiss={() => {
             setShowHelpTooltip(false)
@@ -1020,7 +1110,7 @@ export default function Page() {
           }}
         />
 
-        {isHydrated && !settings.apiKey && (
+        {isHydrated && !aiReady && (
           <div className="flex items-center justify-center gap-3 px-4 py-2 bg-amber-950/80 border-b border-amber-800/60 text-amber-200 text-xs shrink-0">
             <span className="opacity-80">⚡ AI enrichment requires a <strong className="text-amber-200">{providerPreset.label} API key</strong>. Configure it in <strong className="text-amber-200">☰ left panel → Settings</strong>.</span>
             <div className="flex items-center gap-2 shrink-0">

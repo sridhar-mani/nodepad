@@ -18,6 +18,7 @@ import {
   EyeOff,
   Save,
   FolderInput,
+  RefreshCw,
 } from "lucide-react"
 import { ThemeToggle } from './theme-toggle'
 import {
@@ -85,6 +86,9 @@ export function ProjectSidebar({
   const [registryModelError, setRegistryModelError] = useState<string | null>(null)
   // local draft for settings (only save on "Save")
   const [draft, setDraft] = useState<AISettings>(aiSettings)
+  const [ollamaModels, setOllamaModels] = useState<AIModel[]>([])
+  const [ollamaLoading, setOllamaLoading] = useState(false)
+  const [ollamaError, setOllamaError] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -381,7 +385,7 @@ export function ProjectSidebar({
                                 setDraft(d => ({
                                   ...d,
                                   provider: preset.id,
-                                  modelId: newModels[0]?.id ?? "",
+                                  modelId: newModels[0]?.id ?? getDefaultModelForProvider(preset.id),
                                   webGrounding: d.webGrounding,
                                   customBaseUrl: "",
                                   // Restore the saved key for this provider if one exists,
@@ -588,6 +592,17 @@ export function ProjectSidebar({
                         )}
                       </AnimatePresence>
                     </div>
+                  )}
+                  {isOllama && (
+                    <p className="font-mono text-[9px] text-muted-foreground leading-relaxed">
+                      {ollamaLoading
+                        ? "Fetching local models from Ollama..."
+                        : ollamaError
+                          ? `${ollamaError} You can still type a model ID manually.`
+                          : ollamaModels.length > 0
+                            ? `Detected ${ollamaModels.length} local model${ollamaModels.length === 1 ? "" : "s"} from Ollama.`
+                            : "No local model list yet. Click Refresh or enter model ID manually."}
+                    </p>
                   )}
                 </div>
 
