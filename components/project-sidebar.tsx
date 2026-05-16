@@ -22,8 +22,12 @@ import {
 import { ThemeToggle } from './theme-toggle'
 import {
   AI_PROVIDER_PRESETS,
+  MODEL_PRESETS,
+  fetchProviderModelsFromRegistry,
   getModelsForProvider,
+  getSuggestedModelsForTask,
   getPreset,
+  type AIModel,
   type AISettings,
   type AIProvider,
 } from "@/lib/ai-settings"
@@ -73,7 +77,12 @@ export function ProjectSidebar({
   const [showSettings, setShowSettings] = useState(false)
   const [showKey, setShowKey] = useState(false)
   const [modelOpen, setModelOpen] = useState(false)
+  const [presetOpen, setPresetOpen] = useState(false)
   const [providerOpen, setProviderOpen] = useState(false)
+  const [selectedPresetId, setSelectedPresetId] = useState<string>(MODEL_PRESETS[0].id)
+  const [registryModels, setRegistryModels] = useState<AIModel[]>([])
+  const [isLoadingRegistryModels, setIsLoadingRegistryModels] = useState(false)
+  const [registryModelError, setRegistryModelError] = useState<string | null>(null)
   // local draft for settings (only save on "Save")
   const [draft, setDraft] = useState<AISettings>(aiSettings)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -87,8 +96,47 @@ export function ProjectSidebar({
 
   // Sync draft when panel opens
   useEffect(() => {
-    if (showSettings) setDraft(aiSettings)
+    if (showSettings) {
+      setDraft(aiSettings)
+      setRegistryModels([])
+      setRegistryModelError(null)
+    }
   }, [showSettings])
+
+  useEffect(() => {
+    if (!showSettings) return
+
+    let cancelled = false
+    const loadRegistryModels = async () => {
+      setIsLoadingRegistryModels(true)
+      setRegistryModelError(null)
+
+      const liveModels = await fetchProviderModelsFromRegistry(
+        draft.provider,
+        draft.apiKey,
+        draft.customBaseUrl ?? "",
+      )
+
+      if (cancelled) return
+
+      setRegistryModels(liveModels)
+      if (liveModels.length === 0 && draft.apiKey.trim() && draft.provider !== "anthropic") {
+        setRegistryModelError("Could not load provider registry. Using curated model list.")
+      }
+      setIsLoadingRegistryModels(false)
+    }
+
+    loadRegistryModels().catch(() => {
+      if (cancelled) return
+      setRegistryModels([])
+      setRegistryModelError("Could not load provider registry. Using curated model list.")
+      setIsLoadingRegistryModels(false)
+    })
+
+    return () => {
+      cancelled = true
+    }
+  }, [showSettings, draft.provider, draft.apiKey, draft.customBaseUrl])
 
   // Jump straight to settings when requested externally
   useEffect(() => {
@@ -131,9 +179,16 @@ export function ProjectSidebar({
   }
 
   const currentPreset = getPreset(draft.provider)
-  const models = getModelsForProvider(draft.provider)
-  const selectedModel = models.find(m => m.id === draft.modelId) || models[0] || undefined
+  const curatedModels = getModelsForProvider(draft.provider)
+  const models = registryModels.length > 0 ? registryModels : curatedModels
+  const selectedModel = models.find(m => m.id === draft.modelId)
+    || curatedModels.find(m => m.id === draft.modelId)
+    || models[0]
+    || curatedModels[0]
+    || undefined
   const isOllama = draft.provider === "ollama"
+  const selectedPreset = MODEL_PRESETS.find(p => p.id === selectedPresetId) ?? MODEL_PRESETS[0]
+  const suggestedByPreset = getSuggestedModelsForTask(draft.provider, selectedPreset.task, models)
 
   return (
     <div
@@ -333,6 +388,8 @@ export function ProjectSidebar({
                                   // otherwise clear so the user knows to enter a new one.
                                   apiKey: d.providerKeys?.[preset.id] ?? "",
                                 }))
+                                setRegistryModels([])
+                                setRegistryModelError(null)
                                 setProviderOpen(false)
                               }}
                               className="flex w-full items-center gap-2.5 px-2.5 py-2 text-left hover:bg-white/5 transition-colors"
@@ -409,8 +466,70 @@ export function ProjectSidebar({
                 {/* Model Selector */}
                 <div className="flex flex-col gap-2">
                   <label className="font-mono text-[9px] font-bold uppercase tracking-[0.2em] text-muted-foreground">
+                    Premade
+                  </label>
+                  <div className="relative">
+                    <button
+                      onClick={() => setPresetOpen(v => !v)}
+                      className="flex w-full items-center justify-between rounded-md border border-white/10 bg-white/[0.04] px-2.5 py-2 text-left hover:bg-white/[0.07] focus:outline-none transition-colors"
+                    >
+                      <div>
+                        <div className="font-mono text-[11px] font-bold text-foreground">{selectedPreset.label}</div>
+                        <div className="font-mono text-[9px] text-muted-foreground mt-0.5">{selectedPreset.description}</div>
+                      </div>
+                      <ChevronDown className={`h-3 w-3 text-muted-foreground transition-transform ${presetOpen ? "rotate-180" : ""}`} />
+                    </button>
+                    <AnimatePresence>
+                      {presetOpen && (
+                        <motion.div
+                          initial={{ opacity: 0, y: -4 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, y: -4 }}
+                          transition={{ duration: 0.1 }}
+                          className="absolute top-full left-0 right-0 z-20 mt-1 overflow-hidden rounded-md border border-white/10 bg-[#0d0d10] shadow-xl"
+                        >
+                          {MODEL_PRESETS.map((preset) => (
+                            <button
+                              key={preset.id}
+                              onClick={() => {
+                                setSelectedPresetId(preset.id)
+                                const recommended = getSuggestedModelsForTask(draft.provider, preset.task, models)[0]
+                                if (recommended) setDraft(d => ({ ...d, modelId: recommended.id }))
+                                setPresetOpen(false)
+                              }}
+                              className="flex w-full items-center gap-2.5 px-2.5 py-2 text-left hover:bg-white/5 transition-colors"
+                            >
+                              <div className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded border ${
+                                selectedPreset.id === preset.id ? "border-primary bg-primary/20" : "border-white/10"
+                              }`}>
+                                {selectedPreset.id === preset.id && <Check className="h-2.5 w-2.5 text-primary" />}
+                              </div>
+                              <div>
+                                <div className="font-mono text-[10px] font-bold text-foreground">{preset.label}</div>
+                                <div className="font-mono text-[9px] text-muted-foreground">{preset.description}</div>
+                              </div>
+                            </button>
+                          ))}
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+
+                  <label className="font-mono text-[9px] font-bold uppercase tracking-[0.2em] text-muted-foreground">
                     Model
                   </label>
+                  <p className="font-mono text-[9px] text-muted-foreground leading-relaxed">
+                    {registryModels.length > 0 ? "Using live provider registry." : "Using curated model list."}
+                    {isLoadingRegistryModels ? " Refreshing..." : ""}
+                  </p>
+                  {registryModelError && (
+                    <p className="font-mono text-[9px] text-amber-500/80 leading-relaxed">{registryModelError}</p>
+                  )}
+                  {suggestedByPreset.length > 0 && (
+                    <p className="font-mono text-[9px] text-primary/80 leading-relaxed">
+                      Suggested for {selectedPreset.label}: {suggestedByPreset.slice(0, 2).map(m => m.label).join(" · ")}
+                    </p>
+                  )}
                   {models.length === 0 ? (
                     <div className="flex items-center gap-2 rounded-md border border-white/10 bg-white/[0.04] px-2.5 py-2 focus-within:border-primary/50 transition-colors">
                       <input

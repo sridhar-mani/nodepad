@@ -43,6 +43,8 @@ function defaultTemperature(task: LLMGenerateInput["task"]): number {
 }
 
 function pickTaskModel(task: LLMGenerateInput["task"], provider: LLMProviderId, fallbackModel: string): string {
+  if (fallbackModel && fallbackModel.trim()) return fallbackModel
+
   const mapByProvider: Record<LLMProviderId, Partial<Record<LLMGenerateInput["task"], string>>> = {
     openai: {
       tagging: "gpt-4o-mini",

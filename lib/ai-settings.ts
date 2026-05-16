@@ -12,6 +12,42 @@ export interface AIModel {
   groundingModelId?: string
 }
 
+export type ModelTask = "tagging" | "summarize" | "reasoning" | "coding" | "synthesis"
+
+export interface ModelPreset {
+  id: string
+  label: string
+  description: string
+  task: ModelTask
+}
+
+export const MODEL_PRESETS: ModelPreset[] = [
+  {
+    id: "preset-fast-capture",
+    label: "Fast Capture",
+    description: "Quick tagging and lightweight note enrichment",
+    task: "tagging",
+  },
+  {
+    id: "preset-summary",
+    label: "Summary Focus",
+    description: "Compress long notes and context efficiently",
+    task: "summarize",
+  },
+  {
+    id: "preset-deep-reasoning",
+    label: "Deep Reasoning",
+    description: "Higher quality synthesis and critical analysis",
+    task: "reasoning",
+  },
+  {
+    id: "preset-coding",
+    label: "Coding Assistant",
+    description: "Code and structured output oriented model picks",
+    task: "coding",
+  },
+]
+
 export type AIProvider = "openrouter" | "openai" | "anthropic" | "nvidia" | "zai" | "gemini" | "ollama"
 
 export interface AIProviderPreset {
@@ -374,6 +410,55 @@ export function getModelsForProvider(provider: AIProvider): AIModel[] {
   return AI_MODELS // openrouter + safe fallback for any stale localStorage value
 }
 
+function scoreModelForTask(task: ModelTask, model: AIModel): number {
+  const text = `${model.id} ${model.label} ${model.description}`.toLowerCase()
+
+  if (task === "tagging") {
+    let score = 0
+    if (text.includes("mini") || text.includes("8b") || text.includes("haiku") || text.includes("nemo")) score += 3
+    if (text.includes("fast") || text.includes("lite")) score += 2
+    if (text.includes("70b") || text.includes("pro")) score -= 1
+    return score
+  }
+
+  if (task === "summarize") {
+    let score = 0
+    if (text.includes("mistral") || text.includes("gpt-4o") || text.includes("flash")) score += 2
+    if (text.includes("fast") || text.includes("small") || text.includes("mini")) score += 1
+    return score
+  }
+
+  if (task === "reasoning") {
+    let score = 0
+    if (text.includes("70b") || text.includes("pro") || text.includes("sonnet") || text.includes("reason")) score += 3
+    if (text.includes("mini") || text.includes("8b") || text.includes("haiku")) score -= 1
+    return score
+  }
+
+  if (task === "coding") {
+    let score = 0
+    if (text.includes("coder") || text.includes("code") || text.includes("qwen") || text.includes("gpt-4.1")) score += 3
+    if (text.includes("mini") || text.includes("lite")) score -= 1
+    return score
+  }
+
+  let score = 0
+  if (text.includes("70b") || text.includes("pro")) score += 2
+  if (text.includes("mini") || text.includes("8b") || text.includes("haiku")) score -= 1
+  return score
+}
+
+export function getSuggestedModelsForTask(
+  provider: AIProvider,
+  task: ModelTask,
+  models?: AIModel[],
+): AIModel[] {
+  const pool = (models && models.length > 0) ? models : getModelsForProvider(provider)
+  return [...pool]
+    .sort((a, b) => scoreModelForTask(task, b) - scoreModelForTask(task, a))
+    .slice(0, 6)
+}
+
 export const DEFAULT_MODEL_ID = "openai/gpt-4o"
 export const DEFAULT_PROVIDER: AIProvider = "openrouter"
 const DEFAULT_OLLAMA_MODEL_ID = "llama3.2"
@@ -450,6 +535,74 @@ export function getBaseUrl(config: AIConfig): string {
   }
 
   return base
+}
+
+function normalizeBaseUrl(provider: AIProvider, customBaseUrl: string): string {
+  const custom = customBaseUrl.trim()
+  let base = custom || getPreset(provider).baseUrl
+
+  if (/^\d{2,5}$/.test(base)) base = `http://localhost:${base}`
+  if (/^(localhost|127\.0\.0\.1|0\.0\.0\.0)(:\d+)?$/i.test(base)) base = `http://${base}`
+
+  if (provider === "ollama") {
+    base = base.replace(/\/+$/, "")
+    if (!/\/v1$/i.test(base)) base = `${base}/v1`
+  }
+
+  return base
+}
+
+export async function fetchProviderModelsFromRegistry(
+  provider: AIProvider,
+  apiKey: string,
+  customBaseUrl = "",
+): Promise<AIModel[]> {
+  const trimmedKey = apiKey.trim()
+  if (provider !== "ollama" && !trimmedKey) return []
+
+  const baseUrl = normalizeBaseUrl(provider, customBaseUrl)
+  const headers = getProviderHeaders({
+    provider,
+    apiKey: trimmedKey,
+    modelId: "",
+    supportsGrounding: false,
+    customBaseUrl,
+  })
+
+  // Anthropic has a different API shape and no stable /models list in this app.
+  if (provider === "anthropic") return []
+
+  try {
+    const res = await fetch(`${baseUrl}/models`, {
+      method: "GET",
+      headers,
+    })
+    if (!res.ok) return []
+
+    const json = await res.json() as {
+      data?: Array<{ id?: string; name?: string; description?: string; owned_by?: string }>
+    }
+    const models = (json.data ?? [])
+      .map((m) => {
+        const id = (m.id ?? "").trim()
+        if (!id) return null
+        const label = (m.name ?? id).trim()
+        const shortLabel = label.split("/").pop() ?? label
+        const descParts = [m.description, m.owned_by].filter(Boolean)
+        return {
+          id,
+          label,
+          shortLabel,
+          description: descParts.join(" · ") || "Live from provider registry",
+          supportsGrounding: false,
+        } as AIModel
+      })
+      .filter((m): m is AIModel => m !== null)
+
+    return models.slice(0, 120)
+  } catch {
+    return []
+  }
 }
 
 export function getProviderHeaders(config: AIConfig): Record<string, string> {
