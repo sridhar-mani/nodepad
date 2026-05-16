@@ -1,11 +1,10 @@
 "use client"
 
-import { detectContentType } from "@/lib/detect-content-type"
-import { loadAIConfig, getBaseUrl, getProviderHeaders, getModelsForProvider } from "@/lib/ai-settings"
+import { llm } from "@/core/llm"
+import { loadAIConfig, getModelsForProvider } from "@/lib/ai-settings"
 import type { ContentType } from "@/lib/content-types"
 import { toKnowledgeSource, type KnowledgeMatch } from "@/lib/knowledge-base"
-import { tryGeminiNative, shouldFallbackToOpenAI } from "@/lib/ai-gemini-native"
-import type { AIConfig } from "@/lib/ai-settings"
+import { detectContentTypeInWorker } from "@/lib/worker-client"
 
 // ── Provider error parser ─────────────────────────────────────────────────────
 
@@ -154,19 +153,65 @@ const JSON_SCHEMA = {
   },
 }
 
-// ── URL metadata (via server route to bypass CORS) ────────────────────────────
+// ── URL metadata (client-side, best-effort) ───────────────────────────────────
 
 type UrlMeta = { title: string; description: string; excerpt: string; statusCode: number }
 
-async function fetchUrlMetaViaServer(url: string): Promise<UrlMeta | null> {
+function extractMetaFromHtml(html: string): Omit<UrlMeta, "statusCode"> {
+  const tag = (pattern: RegExp) => {
+    const m = html.match(pattern)
+    return m ? m[1].replace(/&quot;/g, '"').replace(/&amp;/g, "&").replace(/&#39;/g, "'").trim() : ""
+  }
+
+  const title =
+    tag(/<meta[^>]+property="og:title"[^>]+content="([^"]+)"/i) ||
+    tag(/<meta[^>]+content="([^"]+)"[^>]+property="og:title"/i) ||
+    tag(/<title[^>]*>([^<]{1,200})<\/title>/i)
+
+  const description =
+    tag(/<meta[^>]+property="og:description"[^>]+content="([^"]+)"/i) ||
+    tag(/<meta[^>]+content="([^"]+)"[^>]+property="og:description"/i) ||
+    tag(/<meta[^>]+name="description"[^>]+content="([^"]+)"/i) ||
+    tag(/<meta[^>]+content="([^"]+)"[^>]+name="description"/i)
+
+  const excerpt = html
+    .replace(/<script[\s\S]*?<\/script>/gi, "")
+    .replace(/<style[\s\S]*?<\/style>/gi, "")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 600)
+
+  return { title: title.slice(0, 200), description: description.slice(0, 400), excerpt }
+}
+
+async function fetchUrlMetaClient(url: string): Promise<UrlMeta | null> {
   try {
-    const res = await fetch("/api/fetch-url", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ url }),
-    })
-    if (!res.ok) return null
-    return await res.json()
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), 5000)
+    let res: Response
+    try {
+      res = await fetch(url, {
+        method: "GET",
+        mode: "cors",
+        redirect: "follow",
+        signal: controller.signal,
+      })
+    } finally {
+      clearTimeout(timer)
+    }
+
+    const statusCode = res.status
+    if (!res.ok) return { title: "", description: "", excerpt: "", statusCode }
+
+    const contentType = res.headers.get("content-type") || ""
+    if (!contentType.includes("text/html")) {
+      const kind = contentType.split(";")[0].trim() || "unknown"
+      return { title: "", description: `Non-HTML resource: ${kind}`, excerpt: "", statusCode }
+    }
+
+    const html = await res.text()
+    return { ...extractMetaFromHtml(html), statusCode }
   } catch {
     return null
   }
@@ -262,65 +307,6 @@ function parseEnrichResult(content: string): EnrichResult | null {
   }
 }
 
-// ── OpenAI-compatible API call (used as fallback or primary for non-Gemini) ────
-
-async function callOpenAICompatibleAPI(
-  baseUrl: string,
-  headers: Record<string, string>,
-  model: string,
-  messages: Array<{ role: "system" | "user"; content: string }>,
-  webSearchOptions?: Record<string, unknown>,
-  useStrictSchema?: boolean,
-  supportsResponseFormat?: boolean,
-): Promise<string> {
-  const MAX_ENRICH_OUTPUT_TOKENS = 1200
-
-  const response = await fetch(`${baseUrl}/chat/completions`, {
-    method: "POST",
-    headers,
-    body: JSON.stringify({
-      model,
-      max_tokens: MAX_ENRICH_OUTPUT_TOKENS,
-      messages,
-      // OpenAI search-preview models reject both response_format AND temperature;
-      // when web_search_options is present, omit both and rely on the schemaHint
-      // in the system prompt to get structured JSON output.
-      ...(webSearchOptions === undefined
-        ? {
-            ...(supportsResponseFormat
-              ? {
-                  response_format: useStrictSchema
-                    ? { type: "json_schema", json_schema: JSON_SCHEMA }
-                    : { type: "json_object" },
-                }
-              : {}),
-            temperature: 0.1,
-          }
-        : { web_search_options: webSearchOptions }),
-    }),
-  })
-
-  if (!response.ok) {
-    throw new Error(await parseProviderError(response))
-  }
-
-  let data: Record<string, unknown>
-  try {
-    data = await response.json()
-  } catch {
-    throw new Error(
-      `AI enrich error: response was not valid JSON. The provider may have timed out or returned a truncated response.`
-    )
-  }
-
-  const content = (data.choices as Array<{ message?: { content?: string } }>)?.[0]?.message?.content
-  if (!content) throw new Error("No content in AI response")
-
-  return content
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-
 export async function enrichBlockClient(
   text: string,
   context: EnrichContext[],
@@ -332,7 +318,7 @@ export async function enrichBlockClient(
   const config = loadAIConfig()
   if (!config) throw new Error("No API key configured")
 
-  const detectedType = detectContentType(text)
+  const detectedType = await detectContentTypeInWorker(text)
   const effectiveType = forcedType || detectedType
   const shouldGround = config.supportsGrounding && TRUTH_DEPENDENT_TYPES.has(effectiveType)
 
@@ -349,7 +335,7 @@ export async function enrichBlockClient(
   }
 
   const supportsJsonSchema = config.provider === "openrouter" || config.provider === "openai"
-  const supportsResponseFormat = config.provider !== "ollama"
+  const supportsResponseFormat = config.provider !== "ollama" && config.provider !== "anthropic"
   // gpt-*-search-preview models have known issues with strict json_schema + web_search_options;
   // fall back to json_object mode (guaranteed valid JSON, no schema enforcement)
   const useStrictSchema = supportsJsonSchema && !webSearchOptions
@@ -395,11 +381,11 @@ You have live web access. For this note type, include 1–2 real source citation
     ).join("\n")}`
     : ""
 
-  // URL prefetch (reference type only) — still server-assisted for CORS bypass
+  // URL prefetch (reference type only), done client-side on CORS-accessible pages.
   let urlContext = ""
   const isUrl = /^https?:\/\//i.test(text.trim())
   if (effectiveType === "reference" && isUrl) {
-    const meta = await fetchUrlMetaViaServer(text.trim())
+    const meta = await fetchUrlMetaClient(text.trim())
     if (meta === null) {
       urlContext = "\n\n<url_fetch_result status=\"error\">Could not reach the URL — network error or timeout. Annotate based on the URL structure alone.</url_fetch_result>"
     } else if (meta.statusCode === 404) {
@@ -428,65 +414,37 @@ You have live web access. For this note type, include 1–2 real source citation
   // Enrichment JSON is compact — annotation ~120 words plus fields fits in 1200.
   const MAX_ENRICH_OUTPUT_TOKENS = 1200
 
-  const baseUrl = getBaseUrl(config)
-  const headers = getProviderHeaders(config)
   const messages = [
     { role: "system" as const, content: systemPrompt },
     { role: "user" as const, content: userMessage },
   ]
 
-  let content: string
+  const llmResult = await llm.generate({
+    task: "reasoning",
+    model,
+    temperature: 0.1,
+    messages,
+    context: {
+      visibleNodes: context.map(c => c.text),
+      activeChunk: text,
+      retrievedChunks: knowledgeMatches.map(m => m.snippet),
+      facts: groundTruth.map(g => g.text),
+    },
+    constraints: {
+      maxInputTokens: 12_000,
+      maxOutputTokens: MAX_ENRICH_OUTPUT_TOKENS,
+      maxRetrievedChunks: 4,
+      maxToolCalls: 2,
+    },
+    responseFormat: supportsResponseFormat
+      ? (useStrictSchema
+        ? { type: "json_schema", json_schema: JSON_SCHEMA }
+        : { type: "json_object" })
+      : undefined,
+    providerRequestExtras: webSearchOptions ? { web_search_options: webSearchOptions } : undefined,
+  })
 
-  // ── Try Gemini native SDK first if provider is Gemini ────────────────────────
-  if (config.provider === "gemini") {
-    const geminiResult = await tryGeminiNative(
-      config,
-      systemPrompt,
-      userMessage,
-      useStrictSchema ? JSON_SCHEMA.schema : undefined,
-    )
-
-    if (geminiResult.success) {
-      content = geminiResult.response
-    } else {
-      // Gemini native failed; log and decide whether to fallback
-      console.warn("Gemini native SDK failed:", geminiResult.error.message)
-
-      if (shouldFallbackToOpenAI(geminiResult.error)) {
-        // Recoverable error (auth, rate limit, etc.) — fall back to OpenAI-compatible endpoint
-        console.info("Falling back to Gemini OpenAI-compatible endpoint")
-        try {
-          content = await callOpenAICompatibleAPI(
-            baseUrl,
-            headers,
-            model,
-            messages,
-            webSearchOptions,
-            useStrictSchema,
-            supportsResponseFormat,
-          )
-        } catch (fallbackError) {
-          throw new Error(
-            `Gemini native failed (${geminiResult.error.message}) and fallback also failed: ${fallbackError instanceof Error ? fallbackError.message : String(fallbackError)}`
-          )
-        }
-      } else {
-        // Non-recoverable error — bubble up
-        throw new Error(`Gemini native call failed: ${geminiResult.error.message}`)
-      }
-    }
-  } else {
-    // ── Non-Gemini providers: use OpenAI-compatible directly ─────────────────────
-    content = await callOpenAICompatibleAPI(
-      baseUrl,
-      headers,
-      model,
-      messages,
-      webSearchOptions,
-      useStrictSchema,
-      supportsResponseFormat,
-    )
-  }
+  const content = llmResult.text
 
   if (!content) throw new Error("No content in AI response")
 
@@ -500,11 +458,9 @@ You have live web access. For this note type, include 1–2 real source citation
     result.confidence = Math.min(100, Math.max(0, Math.round(result.confidence)))
   }
 
-  // Extract clickable source links from response annotations.
-  // Both OpenRouter :online and OpenAI search-preview return citations as
-  // annotations on the message object — not inside the JSON content itself.
+  const raw = llmResult.raw as { choices?: Array<{ message?: { annotations?: unknown[] } }> } | undefined
   const annotations: Array<{ type: string; url_citation?: { url: string; title?: string } }> =
-    ((data.choices as Array<{ message?: { annotations?: unknown[] } }>)?.[0]?.message?.annotations ?? []) as Array<{ type: string; url_citation?: { url: string; title?: string } }>
+    (raw?.choices?.[0]?.message?.annotations ?? []) as Array<{ type: string; url_citation?: { url: string; title?: string } }>
   const seen = new Set<string>()
   const sources = annotations
     .filter(a => a.type === "url_citation" && a.url_citation?.url)
@@ -519,7 +475,6 @@ You have live web access. For this note type, include 1–2 real source citation
       seen.add(s.url)
       return true
     })
-
   if (sources.length > 0) result.sources = sources
 
   if (knowledgeMatches.length > 0) {

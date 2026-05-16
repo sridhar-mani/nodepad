@@ -1,8 +1,7 @@
 "use client"
 
-import { loadAIConfig, getBaseUrl, getProviderHeaders } from "@/lib/ai-settings"
-import { parseProviderError } from "@/lib/ai-enrich"
-import { tryGeminiNative, shouldFallbackToOpenAI } from "@/lib/ai-gemini-native"
+import { llm } from "@/core/llm"
+import { loadAIConfig } from "@/lib/ai-settings"
 
 export interface GhostContext {
   text: string
@@ -56,96 +55,27 @@ Return ONLY valid JSON:
   // Cap output to keep cost low and avoid 402 on limited-credit accounts.
   const MAX_GHOST_OUTPUT_TOKENS = 220
 
-  const baseUrl = getBaseUrl(config)
-  const supportsResponseFormat = config.provider !== "ollama"
-  const headers = getProviderHeaders(config)
+  const result = await llm.generate({
+    task: "synthesis",
+    model,
+    temperature: 0.7,
+    messages: [{ role: "user", content: prompt }],
+    context: {
+      visibleNodes: context.map(c => c.text),
+      pendingTasks: previousSyntheses,
+    },
+    constraints: {
+      maxInputTokens: 12_000,
+      maxOutputTokens: MAX_GHOST_OUTPUT_TOKENS,
+      maxRetrievedChunks: 4,
+      maxToolCalls: 2,
+    },
+    responseFormat: config.provider !== "ollama" && config.provider !== "anthropic"
+      ? { type: "json_object" }
+      : undefined,
+  })
 
-  let rawContent: string
-
-  // ── Try Gemini native SDK first if provider is Gemini ────────────────────────
-  if (config.provider === "gemini") {
-    const geminiResult = await tryGeminiNative(
-      config,
-      "You are an Emergent Thesis engine. Return ONLY valid JSON: {\"text\": \"...\", \"category\": \"...\"}",
-      prompt,
-      supportsResponseFormat ? { type: "object", properties: { text: { type: "string" }, category: { type: "string" } } } : undefined,
-    )
-
-    if (geminiResult.success) {
-      rawContent = geminiResult.response
-    } else {
-      // Gemini native failed; check if we should fallback
-      console.warn("Gemini native SDK failed for ghost generation:", geminiResult.error.message)
-
-      if (shouldFallbackToOpenAI(geminiResult.error)) {
-        // Fall back to OpenAI-compatible endpoint
-        console.info("Falling back to Gemini OpenAI-compatible endpoint for ghost generation")
-        try {
-          const response = await fetch(`${baseUrl}/chat/completions`, {
-            method: "POST",
-            headers,
-            body: JSON.stringify({
-              model,
-              max_tokens: MAX_GHOST_OUTPUT_TOKENS,
-              messages: [{ role: "user", content: prompt }],
-              ...(supportsResponseFormat ? { response_format: { type: "json_object" } } : {}),
-              temperature: 0.7,
-            }),
-          })
-
-          if (!response.ok) {
-            throw new Error(await parseProviderError(response))
-          }
-
-          let data: Record<string, unknown>
-          try {
-            data = await response.json()
-          } catch {
-            throw new Error(
-              `AI ghost error: response was not valid JSON. The provider may have timed out or returned a truncated response.`
-            )
-          }
-          rawContent = (data.choices as Array<{ message?: { content?: string } }>)?.[0]?.message?.content ?? ""
-          if (!rawContent) throw new Error("No content in AI response")
-        } catch (fallbackError) {
-          throw new Error(
-            `Gemini native failed and fallback also failed: ${fallbackError instanceof Error ? fallbackError.message : String(fallbackError)}`
-          )
-        }
-      } else {
-        // Non-recoverable error
-        throw new Error(`Gemini native call failed: ${geminiResult.error.message}`)
-      }
-    }
-  } else {
-    // ── Non-Gemini providers: use OpenAI-compatible directly ─────────────────────
-    const response = await fetch(`${baseUrl}/chat/completions`, {
-      method: "POST",
-      headers,
-      body: JSON.stringify({
-        model,
-        max_tokens: MAX_GHOST_OUTPUT_TOKENS,
-        messages: [{ role: "user", content: prompt }],
-        ...(supportsResponseFormat ? { response_format: { type: "json_object" } } : {}),
-        temperature: 0.7,
-      }),
-    })
-
-    if (!response.ok) {
-      throw new Error(await parseProviderError(response))
-    }
-
-    let data: Record<string, unknown>
-    try {
-      data = await response.json()
-    } catch {
-      throw new Error(
-        `AI ghost error (${config.provider}): response was not valid JSON. The provider may have timed out or returned a truncated response.`
-      )
-    }
-    rawContent = (data.choices as Array<{ message?: { content?: string } }>)?.[0]?.message?.content ?? ""
-    if (!rawContent) throw new Error("No content in AI response")
-  }
+  const rawContent = result.text
 
   if (!rawContent) throw new Error("No content in AI response")
 

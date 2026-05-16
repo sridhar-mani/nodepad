@@ -18,14 +18,21 @@ import { enrichBlockClient } from "@/lib/ai-enrich"
 import { generateGhostClient } from "@/lib/ai-ghost"
 import { exportToMarkdown, downloadMarkdown, copyToClipboard } from "@/lib/export"
 import { downloadNodepadFile, parseNodepadFile, NodepadParseError } from "@/lib/nodepad-format"
-import { detectContentType } from "@/lib/detect-content-type"
 import {
-  buildKnowledgeDocumentFromFile,
-  findKnowledgeMatches,
+  loadWorkspaceFromIndexedDB,
+  saveWorkspaceBackupToIndexedDB,
+  saveWorkspaceToIndexedDB,
+} from "@/lib/project-storage"
+import {
   isLikelyTextFile,
   mergeKnowledgeDocs,
   type KnowledgeDocument,
 } from "@/lib/knowledge-base"
+import {
+  buildKnowledgeDocumentsFromFilesInWorker,
+  findKnowledgeMatchesInWorker,
+  detectContentTypeInWorker,
+} from "@/lib/worker-client"
 
 function generateId() {
   return Math.random().toString(36).substring(2, 10)
@@ -148,86 +155,120 @@ export default function Page() {
 
   // 1. Persistence: Initial Load & Migration
   useEffect(() => {
-    const savedProjects = localStorage.getItem("nodepad-projects")
-    const savedActiveId = localStorage.getItem("nodepad-active-project")
-    
-    const oldBlocks = localStorage.getItem("nodepad-blocks")
-    const oldCollapsed = localStorage.getItem("nodepad-collapsed")
+    let cancelled = false
 
-    let initialProjects: Project[] = []
-    let initialActiveId = ""
+    const loadWorkspace = async () => {
+      let initialProjects: Project[] = []
+      let initialActiveId = ""
+      let loadedFromLegacyStorage = false
 
-    const backupProjects = localStorage.getItem("nodepad-backup")
-
-    if (savedProjects) {
       try {
-        initialProjects = JSON.parse(savedProjects)
-        initialActiveId = savedActiveId || initialProjects[0]?.id || ""
-      } catch (e) {
-        console.error("Failed to parse saved projects — trying backup", e)
-        // Fall through to backup attempt below
-      }
-    }
-
-    // Fallback: restore from silent backup if primary key was absent or corrupt
-    if (initialProjects.length === 0 && backupProjects) {
-      try {
-        initialProjects = JSON.parse(backupProjects)
-        initialActiveId = initialProjects[0]?.id || ""
-        console.info("Restored from nodepad-backup")
-      } catch (e) {
-        console.error("Backup restore also failed", e)
-      }
-    }
-
-    if (initialProjects.length === 0 && oldBlocks) {
-      try {
-        const blks = JSON.parse(oldBlocks)
-        const collapsed = oldCollapsed ? JSON.parse(oldCollapsed) : []
-        const defaultProject: Project = {
-          id: "default",
-          name: "Default Space",
-          blocks: blks,
-          collapsedIds: collapsed,
-          ghostNotes: [],
+        const indexed = await loadWorkspaceFromIndexedDB<Project>()
+        if (indexed?.projects?.length) {
+          initialProjects = indexed.projects
+          initialActiveId = indexed.activeProjectId || indexed.projects[0]?.id || ""
         }
-        initialProjects = [defaultProject]
-        initialActiveId = "default"
-      } catch (e) {
-        console.error("Migration failed", e)
+      } catch (error) {
+        console.warn("IndexedDB load failed; attempting legacy localStorage migration", error)
+      }
+
+      if (initialProjects.length === 0) {
+        loadedFromLegacyStorage = true
+        const savedProjects = localStorage.getItem("nodepad-projects")
+        const savedActiveId = localStorage.getItem("nodepad-active-project")
+        const oldBlocks = localStorage.getItem("nodepad-blocks")
+        const oldCollapsed = localStorage.getItem("nodepad-collapsed")
+        const backupProjects = localStorage.getItem("nodepad-backup")
+
+        if (savedProjects) {
+          try {
+            initialProjects = JSON.parse(savedProjects)
+            initialActiveId = savedActiveId || initialProjects[0]?.id || ""
+          } catch (e) {
+            console.error("Failed to parse saved projects — trying backup", e)
+          }
+        }
+
+        if (initialProjects.length === 0 && backupProjects) {
+          try {
+            initialProjects = JSON.parse(backupProjects)
+            initialActiveId = initialProjects[0]?.id || ""
+            console.info("Restored from nodepad-backup")
+          } catch (e) {
+            console.error("Backup restore also failed", e)
+          }
+        }
+
+        if (initialProjects.length === 0 && oldBlocks) {
+          try {
+            const blks = JSON.parse(oldBlocks)
+            const collapsed = oldCollapsed ? JSON.parse(oldCollapsed) : []
+            const defaultProject: Project = {
+              id: "default",
+              name: "Default Space",
+              blocks: blks,
+              collapsedIds: collapsed,
+              ghostNotes: [],
+            }
+            initialProjects = [defaultProject]
+            initialActiveId = "default"
+          } catch (e) {
+            console.error("Migration failed", e)
+          }
+        }
+      }
+
+      if (initialProjects.length === 0) {
+        initialProjects = INITIAL_PROJECTS
+        initialActiveId = INITIAL_PROJECTS[0].id
+      }
+
+      if (cancelled) return
+
+      setProjects(initialProjects)
+      setActiveProjectId(initialActiveId)
+      setIsLoaded(true)
+
+      if (!localStorage.getItem("nodepad-intro-seen")) {
+        setIsIntroOpen(true)
+      }
+
+      if (loadedFromLegacyStorage) {
+        saveWorkspaceToIndexedDB(initialProjects, initialActiveId).catch(error => {
+          console.warn("Initial IndexedDB migration save failed", error)
+        })
       }
     }
 
-    if (initialProjects.length === 0) {
-      initialProjects = INITIAL_PROJECTS
-      initialActiveId = INITIAL_PROJECTS[0].id
+    loadWorkspace().catch(error => {
+      console.error("Workspace load failed", error)
+      if (!cancelled) {
+        setProjects(INITIAL_PROJECTS)
+        setActiveProjectId(INITIAL_PROJECTS[0].id)
+        setIsLoaded(true)
+      }
+    })
+
+    return () => {
+      cancelled = true
     }
-
-    setProjects(initialProjects)
-    setActiveProjectId(initialActiveId)
-    setIsLoaded(true)
-
-    // Show intro modal on first visit
-    if (!localStorage.getItem("nodepad-intro-seen")) {
-      setIsIntroOpen(true)
-    }
-
   }, [])
 
   // 2. Persistence: Save on Change
   useEffect(() => {
     if (!isLoaded) return
-    localStorage.setItem("nodepad-projects", JSON.stringify(projects))
-    localStorage.setItem("nodepad-active-project", activeProjectId)
+    saveWorkspaceToIndexedDB(projects, activeProjectId).catch(error => {
+      console.warn("IndexedDB workspace save failed", error)
+    })
   }, [projects, activeProjectId, isLoaded])
 
   // 3. Silent rolling backup — written on every change, separate key.
   //    If nodepad-projects is ever wiped, the load effect can fall back to this.
   useEffect(() => {
     if (!isLoaded || projects.length === 0) return
-    try {
-      localStorage.setItem("nodepad-backup", JSON.stringify(projects))
-    } catch { /* quota exceeded — skip silently */ }
+    saveWorkspaceBackupToIndexedDB(projects).catch(() => {
+      // Quota or IndexedDB unavailability; skip silently.
+    })
   }, [projects, isLoaded])
 
   // Hidden file input for .nodepad import — triggered from sidebar or ⌘K
@@ -408,7 +449,7 @@ export default function Page() {
       .map(b => ({ id: b.id, text: b.text, category: b.category }))
       .slice(-8)
 
-    const knowledgeMatches = findKnowledgeMatches(
+    const knowledgeMatches = await findKnowledgeMatchesInWorker(
       text,
       targetProject.knowledgeDocuments ?? [],
       4,
@@ -627,16 +668,12 @@ export default function Page() {
       // Types where the heuristic is syntactically unambiguous — the AI is also
       // sent forcedType so it won't reclassify them.  We can show these types
       // immediately because they will never change after enrichment.
-      const heuristicType = resolvedType ?? detectContentType(resolvedText)
+      const heuristicType = resolvedType ?? "general"
       const HIGH_CONFIDENCE_TYPES = new Set<ContentType>(["question", "reference", "quote", "task"])
       const enrichForcedType = resolvedType
-        ?? (HIGH_CONFIDENCE_TYPES.has(heuristicType) ? heuristicType : undefined)
 
-      // For ambiguous types (claim, idea, reflection, …) the AI may return a
-      // different classification, so start as "general" during enrichment to
-      // avoid a jarring double-classification jump in the UI.
-      const initialDisplayType: ContentType = resolvedType
-        ?? (HIGH_CONFIDENCE_TYPES.has(heuristicType) ? heuristicType : "general")
+      // Start as general while worker+AI classify in the background.
+      const initialDisplayType: ContentType = resolvedType ?? "general"
       const autoGroundTruth = isKnowledgeLikeInput(resolvedText, resolvedType ?? heuristicType)
 
       pushHistory(activeProjectId, blocksRef.current)
@@ -653,6 +690,21 @@ export default function Page() {
       }))
 
       setIsCommandKOpen(false)
+
+      if (!resolvedType) {
+        detectContentTypeInWorker(resolvedText)
+          .then((detected) => {
+            if (!HIGH_CONFIDENCE_TYPES.has(detected)) return
+            setProjects(current => current.map(p => p.id === activeProjectId ? {
+              ...p,
+              blocks: p.blocks.map(b => b.id === newId ? { ...b, contentType: detected } : b),
+            } : p))
+          })
+          .catch(() => {
+            // Best effort only.
+          })
+      }
+
       enrichBlock(activeProjectId, newId, resolvedText, undefined, enrichForcedType).catch(console.error)
     },
     [activeProjectId, pushHistory, updateActiveProject, enrichBlock]
@@ -667,14 +719,12 @@ export default function Page() {
     const candidates = files.filter(isLikelyTextFile)
     if (candidates.length === 0) return
 
-    const built: KnowledgeDocument[] = []
-    for (const file of candidates) {
-      try {
-        const doc = await buildKnowledgeDocumentFromFile(file)
-        if (doc.rawText.trim()) built.push(doc)
-      } catch {
-        // Skip unreadable files; continue with the rest.
-      }
+    let built: KnowledgeDocument[] = []
+    try {
+      built = await buildKnowledgeDocumentsFromFilesInWorker(candidates)
+      built = built.filter(doc => doc.rawText.trim())
+    } catch {
+      built = []
     }
     if (built.length === 0) return
 

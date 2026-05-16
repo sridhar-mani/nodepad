@@ -12,7 +12,7 @@ export interface AIModel {
   groundingModelId?: string
 }
 
-export type AIProvider = "openrouter" | "openai" | "zai" | "gemini" | "ollama"
+export type AIProvider = "openrouter" | "openai" | "anthropic" | "nvidia" | "zai" | "gemini" | "ollama"
 
 export interface AIProviderPreset {
   id: AIProvider
@@ -36,6 +36,20 @@ export const AI_PROVIDER_PRESETS: AIProviderPreset[] = [
     baseUrl: "https://api.openai.com/v1",
     keyUrl: "https://platform.openai.com/api-keys",
     keyPlaceholder: "sk-...",
+  },
+  {
+    id: "anthropic",
+    label: "Anthropic",
+    baseUrl: "https://api.anthropic.com/v1",
+    keyUrl: "https://console.anthropic.com/settings/keys",
+    keyPlaceholder: "sk-ant-...",
+  },
+  {
+    id: "nvidia",
+    label: "NVIDIA NIM",
+    baseUrl: "https://integrate.api.nvidia.com/v1",
+    keyUrl: "https://build.nvidia.com/",
+    keyPlaceholder: "nvapi-...",
   },
   {
     id: "gemini",
@@ -188,6 +202,47 @@ export const ZAI_MODELS: AIModel[] = [
   },
 ]
 
+export const ANTHROPIC_MODELS: AIModel[] = [
+  {
+    id: "claude-3-7-sonnet-latest",
+    label: "Claude 3.7 Sonnet",
+    shortLabel: "Claude 3.7",
+    description: "Strong reasoning and coding quality",
+    supportsGrounding: false,
+  },
+  {
+    id: "claude-3-5-haiku-latest",
+    label: "Claude 3.5 Haiku",
+    shortLabel: "Haiku",
+    description: "Fast low-latency model",
+    supportsGrounding: false,
+  },
+]
+
+export const NVIDIA_MODELS: AIModel[] = [
+  {
+    id: "meta/llama-3.1-70b-instruct",
+    label: "Llama 3.1 70B Instruct",
+    shortLabel: "Llama 70B",
+    description: "High-quality synthesis and reasoning",
+    supportsGrounding: false,
+  },
+  {
+    id: "meta/llama-3.1-8b-instruct",
+    label: "Llama 3.1 8B Instruct",
+    shortLabel: "Llama 8B",
+    description: "Fast tagging and classification",
+    supportsGrounding: false,
+  },
+  {
+    id: "nvidia/nv-embedqa-e5-v5",
+    label: "NV-EmbedQA E5 v5",
+    shortLabel: "NV Embed",
+    description: "Optimized retrieval embedding model",
+    supportsGrounding: false,
+  },
+]
+
 export const GEMINI_MODELS: AIModel[] = [
   // ── Gemini 3.1 Family (Preview - Latest, April 2026) ──────────────────────
   {
@@ -304,6 +359,8 @@ export const OLLAMA_MODELS: AIModel[] = []
 
 export function getModelsForProvider(provider: AIProvider): AIModel[] {
   if (provider === "openai") return OPENAI_MODELS
+  if (provider === "anthropic") return ANTHROPIC_MODELS
+  if (provider === "nvidia") return NVIDIA_MODELS
   if (provider === "zai") return ZAI_MODELS
   if (provider === "gemini") return GEMINI_MODELS
   if (provider === "ollama") return OLLAMA_MODELS
