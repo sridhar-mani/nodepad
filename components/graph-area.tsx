@@ -420,7 +420,7 @@ export function GraphArea({
                 ))}
               </div>
 
-              <p className="text-[13px] text-white uppercase tracking-[0.15em] whitespace-nowrap">
+              <p className="text-[13px] text-foreground/65 uppercase tracking-[0.15em] whitespace-nowrap">
                 {`type anything · #type to classify · ${mod}K for commands`}
               </p>
             </div>

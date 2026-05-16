@@ -66,9 +66,9 @@ function pickTaskModel(task: LLMGenerateInput["task"], provider: LLMProviderId, 
     },
     nvidia: {
       tagging: "meta/llama-3.1-8b-instruct",
-      summarize: "mistralai/mistral-small-24b-instruct",
-      reasoning: "deepseek-ai/deepseek-r1",
-      coding: "qwen/qwen2.5-coder-32b-instruct",
+      summarize: "mistralai/mistral-nemo-12b-instruct",
+      reasoning: "meta/llama-3.1-70b-instruct",
+      coding: "meta/llama-3.3-70b-instruct",
       synthesis: "meta/llama-3.1-70b-instruct",
     },
   }

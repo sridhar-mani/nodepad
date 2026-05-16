@@ -235,10 +235,17 @@ export const NVIDIA_MODELS: AIModel[] = [
     supportsGrounding: false,
   },
   {
-    id: "nvidia/nv-embedqa-e5-v5",
-    label: "NV-EmbedQA E5 v5",
-    shortLabel: "NV Embed",
-    description: "Optimized retrieval embedding model",
+    id: "meta/llama-3.3-70b-instruct",
+    label: "Llama 3.3 70B Instruct",
+    shortLabel: "Llama 3.3",
+    description: "High-quality long synthesis and instruction following",
+    supportsGrounding: false,
+  },
+  {
+    id: "mistralai/mistral-nemo-12b-instruct",
+    label: "Mistral NeMo 12B Instruct",
+    shortLabel: "NeMo 12B",
+    description: "Fast, lower-cost note annotation and summaries",
     supportsGrounding: false,
   },
 ]

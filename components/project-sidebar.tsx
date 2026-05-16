@@ -142,11 +142,11 @@ export function ProjectSidebar({
         opacity: isOpen ? 1 : 0,
         visibility: isOpen ? "visible" : "hidden"
       }}
-      className="fixed inset-y-0 left-0 z-50 transition-all duration-200 ease-in-out overflow-hidden border-r border-border bg-black/20 backdrop-blur-3xl flex flex-col h-[100dvh] w-[min(88vw,18rem)] md:static md:h-full md:w-auto"
+      className="fixed inset-y-0 left-0 z-50 transition-all duration-200 ease-in-out overflow-hidden border-r border-border bg-card/85 backdrop-blur-3xl flex flex-col h-[100dvh] w-[min(88vw,18rem)] md:static md:h-full md:w-auto"
     >
       <div className="w-full md:w-[240px] flex flex-col h-full">
         {/* Header */}
-        <div className="flex h-10 items-center justify-between border-b border-border bg-card/5 backdrop-blur-md px-3 py-1.5 shrink-0">
+        <div className="flex h-10 items-center justify-between border-b border-border bg-card/70 backdrop-blur-md px-3 py-1.5 shrink-0">
           <div className="flex items-center gap-2.5">
             {showSettings ? (
               <button
@@ -169,7 +169,7 @@ export function ProjectSidebar({
           </div>
           <button
             onClick={handleClose}
-            className="p-1 px-1.5 hover:bg-white/5 rounded-sm transition-colors text-muted-foreground hover:text-foreground"
+            className="p-1 px-1.5 hover:bg-secondary rounded-sm transition-colors text-muted-foreground hover:text-foreground"
           >
             <X className="h-3.5 w-3.5" />
           </button>
@@ -193,7 +193,7 @@ export function ProjectSidebar({
                     className={`group relative rounded-sm transition-all duration-150 ${
                       activeProjectId === project.id 
                         ? "bg-primary/10 shadow-[inset_0_1px_0px_rgba(255,255,255,0.05)]" 
-                        : "hover:bg-white/5"
+                        : "hover:bg-secondary/60"
                     }`}
                   >
                     <div className="flex items-center p-2 px-2.5">

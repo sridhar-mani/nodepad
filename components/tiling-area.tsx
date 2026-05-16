@@ -279,7 +279,7 @@ export function TilingArea({
                 <div
                   key={idx}
                   data-page-idx={idx}
-                  className={`flex w-full min-h-[220px] ${heightClass} border-b border-white/5 last:border-0`}
+                  className={`flex w-full min-h-[220px] ${heightClass} border-b border-border/50 last:border-0`}
                 >
                   {renderBSPNode(tree, chunkedPages[idx])}
                 </div>
@@ -313,7 +313,7 @@ export function TilingArea({
             </div>
 
 
-            <p className="text-[13px] text-white uppercase tracking-[0.15em] whitespace-nowrap">
+            <p className="text-[13px] text-foreground/65 uppercase tracking-[0.15em] whitespace-nowrap">
               {`type anything · #type to classify · ${mod}K for commands`}
             </p>
           </div>
