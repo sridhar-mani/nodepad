@@ -90,6 +90,12 @@ export function ProjectSidebar({
   const [ollamaLoading, setOllamaLoading] = useState(false)
   const [ollamaError, setOllamaError] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+  const [themeChoice, setThemeChoice] = useState<'system'|'light'|'dark'>(() => {
+    try {
+      const t = typeof window !== 'undefined' ? localStorage.getItem('theme') : null
+      return t === 'light' || t === 'dark' ? (t as 'light'|'dark') : 'system'
+    } catch (e) { return 'system' }
+  })
 
   useEffect(() => {
     if (editingId && inputRef.current) {
@@ -104,6 +110,11 @@ export function ProjectSidebar({
       setDraft(aiSettings)
       setRegistryModels([])
       setRegistryModelError(null)
+      // sync theme choice when opening settings
+      try {
+        const t = typeof window !== 'undefined' ? localStorage.getItem('theme') : null
+        setThemeChoice(t === 'light' || t === 'dark' ? (t as 'light'|'dark') : 'system')
+      } catch (e) {}
     }
   }, [showSettings])
 
@@ -168,6 +179,22 @@ export function ProjectSidebar({
       [draft.provider]: trimmedKey,
     }
     onUpdateAISettings({ ...draft, apiKey: trimmedKey, providerKeys })
+  }
+
+  // Theme controls (Settings panel only)
+  const applyTheme = (t: string | null) => {
+    if (typeof window === 'undefined') return
+    const root = document.documentElement
+    root.classList.remove('dark', 'light')
+    if (t === 'light' || t === 'dark') {
+      root.classList.add(t)
+      try { localStorage.setItem('theme', t) } catch (e) {}
+    } else {
+      try { localStorage.removeItem('theme') } catch (e) {}
+      // apply system preference
+      const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
+      root.classList.add(prefersDark ? 'dark' : 'light')
+    }
   }
 
   const handleSaveSettings = () => {
