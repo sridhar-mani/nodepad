@@ -3,6 +3,8 @@ import { Geist, Geist_Mono, Vazirmatn } from 'next/font/google'
 import Script from 'next/script'
 import { MobileWall } from '@/components/mobile-wall'
 import { PWAHooks } from '@/components/pwa-hooks'
+import { AdsScript } from '@/components/ads-script'
+import { WindowControlsOverlay } from '@/components/window-controls-overlay'
 import './globals.css'
 
 const _geist = Geist({ subsets: ["latin"] });
@@ -13,6 +15,12 @@ const vazirmatn = Vazirmatn({
   display: "swap",
 });
 
+export const viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  viewportFit: 'cover' as const,
+}
+
 export const metadata: Metadata = {
   title: 'nodepad',
   description: 'A spatial research tool where AI augments your thinking — not replaces it.',
@@ -20,6 +28,11 @@ export const metadata: Metadata = {
   icons: {
     icon: [{ url: '/icon.svg', type: 'image/svg+xml' }],
     apple: '/apple-icon.png',
+  },
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'default',
+    title: 'nodepad',
   },
   openGraph: {
     title: 'nodepad',
@@ -43,9 +56,18 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{var t=localStorage.getItem('theme');var d=document.documentElement;d.classList.remove('dark','light');if(t==='light'||t==='dark'){d.classList.add(t);}else{d.classList.add(window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');}}catch(e){document.documentElement.classList.add('dark');}})();`,
+          }}
+        />
+      </head>
       <body className={`font-sans antialiased ${vazirmatn.variable}`} suppressHydrationWarning>
         <MobileWall />
+        <WindowControlsOverlay />
         <PWAHooks />
+        <AdsScript />
         {children}
         {/* Umami analytics — nodepad.space only. Remove or replace with your
             own data-website-id if self-hosting. Safe to delete entirely. */}

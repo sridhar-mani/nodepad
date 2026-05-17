@@ -17,7 +17,10 @@ import { getPreset, useAISettings } from "@/lib/ai-settings"
 import { enrichBlockClient } from "@/lib/ai-enrich"
 import { generateGhostClient } from "@/lib/ai-ghost"
 import { exportToMarkdown, downloadMarkdown, copyToClipboard } from "@/lib/export"
-import { downloadNodepadFile, parseNodepadFile, NodepadParseError } from "@/lib/nodepad-format"
+import { downloadNodepadFile, parseNodepadFile, serialiseProject, NodepadParseError } from "@/lib/nodepad-format"
+import { PwaRuntime } from "@/components/pwa-runtime"
+import { verifyBiometricLock, hasStoredWebAuthnCredential } from "@/lib/pwa/webauthn"
+import { readWorkspaceFromOpfs } from "@/lib/pwa/opfs"
 import {
   loadWorkspaceFromIndexedDB,
   saveWorkspaceBackupToIndexedDB,
@@ -28,6 +31,14 @@ import {
   mergeKnowledgeDocs,
   type KnowledgeDocument,
 } from "@/lib/knowledge-base"
+import { findKnowledgeGapSuggestions } from "@/lib/knowledge-graph"
+import { normalizeConfidencePercent } from "@/lib/confidence"
+import { applySchedulePatch, type SchedulePatch } from "@/lib/scheduling"
+import { ReminderEngine } from "@/components/reminder-engine"
+import { AdsRuntime } from "@/components/ads-runtime"
+import { PanelBackdrop } from "@/components/panel-backdrop"
+import { ViewModeBar } from "@/components/view-mode-bar"
+import { useViewport } from "@/lib/use-viewport"
 import {
   buildKnowledgeDocumentsFromFilesInWorker,
   findKnowledgeMatchesInWorker,
@@ -80,6 +91,7 @@ export default function Page() {
   const providerPreset = getPreset(settings.provider)
   const aiReady = settings.provider === "ollama" || Boolean(settings.apiKey)
   const debounceTimers = useRef<Record<string, Record<string, NodeJS.Timeout>>>({})
+  const { isCompact, isMobile, isTablet } = useViewport()
 
   // ── Undo history ring (max 20 block snapshots per project) ───────────────
   const blockHistoryRef = useRef<Record<string, TextBlock[][]>>({})
@@ -138,6 +150,70 @@ export default function Page() {
 
   const blocks = activeProject?.blocks || []
   const ghostNotes = activeProject?.ghostNotes || []
+
+  const knowledgeGapSuggestions = useMemo(
+    () => findKnowledgeGapSuggestions(blocks, activeProject?.knowledgeDocuments ?? [], 4),
+    [blocks, activeProject?.knowledgeDocuments],
+  )
+
+  const closeOverlayPanels = useCallback(() => {
+    setIsSidebarOpen(false)
+    setIsIndexOpen(false)
+    setIsGhostPanelOpen(false)
+  }, [])
+
+  const toggleSidebar = useCallback(() => {
+    setIsSidebarOpen((open) => {
+      const next = !open
+      if (next && isCompact) {
+        setIsIndexOpen(false)
+        setIsGhostPanelOpen(false)
+      }
+      return next
+    })
+  }, [isCompact])
+
+  const toggleIndex = useCallback(() => {
+    setIsIndexOpen((open) => {
+      const next = !open
+      if (next && isCompact) {
+        setIsSidebarOpen(false)
+        setIsGhostPanelOpen(false)
+      }
+      return next
+    })
+  }, [isCompact])
+
+  const toggleGhostPanel = useCallback(() => {
+    setIsGhostPanelOpen((open) => {
+      const next = !open
+      if (next && isCompact) {
+        setIsSidebarOpen(false)
+        setIsIndexOpen(false)
+      }
+      return next
+    })
+  }, [isCompact])
+
+  useEffect(() => {
+    if (!isLoaded) return
+    try {
+      if (localStorage.getItem("nodepad-default-view-set")) return
+      if (isMobile || isTablet) setViewMode("kanban")
+      localStorage.setItem("nodepad-default-view-set", "1")
+    } catch {
+      /* ignore */
+    }
+  }, [isLoaded, isMobile, isTablet])
+
+  const workspaceJson = useMemo(() => {
+    if (!activeProject) return undefined
+    try {
+      return JSON.stringify(serialiseProject(activeProject))
+    } catch {
+      return undefined
+    }
+  }, [activeProject])
 
   const updateActiveProject = useCallback((updater: (p: Project) => Project) => {
     setProjects(prev => prev.map(p => p.id === activeProjectId ? updater(p) : p))
@@ -220,15 +296,27 @@ export default function Page() {
       }
 
       if (initialProjects.length === 0) {
+        const opfs = await readWorkspaceFromOpfs<{ projects?: Project[]; activeProjectId?: string }>()
+        if (opfs?.projects?.length) {
+          initialProjects = opfs.projects
+          initialActiveId = opfs.activeProjectId || opfs.projects[0]?.id || ""
+        }
+      }
+
+      if (initialProjects.length === 0) {
         initialProjects = INITIAL_PROJECTS
         initialActiveId = INITIAL_PROJECTS[0].id
       }
 
       if (cancelled) return
 
-      setProjects(initialProjects)
-      setActiveProjectId(initialActiveId)
-      setIsLoaded(true)
+      if (hasStoredWebAuthnCredential()) {
+        const unlocked = await verifyBiometricLock()
+        if (!unlocked && !cancelled) {
+          console.warn("Biometric unlock failed — continuing in read-only spirit")
+        }
+      }
+
       setProjects(initialProjects)
       setActiveProjectId(initialActiveId)
       setIsLoaded(true)
@@ -456,7 +544,16 @@ export default function Page() {
       // Pass the last 5 generated ghost texts so the model can avoid near-duplicates
       const previousSyntheses = (targetProject.lastGhostTexts || []).slice(-5)
 
-      const data = await generateGhostClient(context, previousSyntheses)
+      const kbHints = findKnowledgeGapSuggestions(
+        enrichedBlocks,
+        targetProject.knowledgeDocuments ?? [],
+        3,
+      ).map(
+        (g) =>
+          `Note "${g.blockPreview}…" may relate to "${g.docTitle}": ${g.snippet.slice(0, 120)}`,
+      )
+
+      const data = await generateGhostClient(context, previousSyntheses, kbHints)
       setProjects(prev => prev.map(p => {
         if (p.id !== projectId) return p
         return {
@@ -581,7 +678,7 @@ export default function Page() {
                   contentType: data.contentType,
                   category: data.category,
                   annotation: data.annotation,
-                  confidence: data.confidence,
+                  confidence: normalizeConfidencePercent(data.confidence),
                   influencedBy,
                   isUnrelated: data.isUnrelated,
                   sources: [...(data.sources ?? []), ...(data.knowledgeSources ?? [])],
@@ -645,7 +742,7 @@ export default function Page() {
               contentType: data.contentType,
               category: data.category,
               annotation: data.annotation,
-              confidence: data.confidence,
+              confidence: normalizeConfidencePercent(data.confidence),
               influencedBy,
               isUnrelated: data.isUnrelated,
               sources: [...(data.sources ?? []), ...(data.knowledgeSources ?? [])],
@@ -800,6 +897,39 @@ export default function Page() {
     [activeProjectId, pushHistory, updateActiveProject, enrichBlock]
   )
 
+  const handlePwaShortcut = useCallback((action: string) => {
+    if (action === "capture") {
+      document.querySelector<HTMLInputElement>('[cmdk-input]')?.focus()
+    } else if (action === "synthesis") {
+      setIsGhostPanelOpen(true)
+    } else if (action === "settings") {
+      setJumpToSettings(true)
+      setIsSidebarOpen(true)
+    } else if (action.startsWith("view-")) {
+      const mode = action.replace("view-", "") as "tiling" | "kanban" | "graph"
+      if (mode === "tiling" || mode === "kanban" || mode === "graph") setViewMode(mode)
+    }
+  }, [])
+
+  const handleShareImport = useCallback((text: string) => {
+    if (text.trim()) addBlock(text.trim())
+  }, [addBlock])
+
+  const handlePwaImportFile = useCallback((file: File) => {
+    const reader = new FileReader()
+    reader.onload = () => {
+      try {
+        const names = projects.map((p) => p.name)
+        const imported = parseNodepadFile(String(reader.result), names) as Project
+        setProjects((prev) => [...prev, imported])
+        setActiveProjectId(imported.id)
+      } catch (err) {
+        console.error(err)
+      }
+    }
+    reader.readAsText(file)
+  }, [projects])
+
   const addReferenceImageBlock = useCallback((imageDataUrl: string, fileName: string) => {
     const refText = `![${fileName}](${imageDataUrl})\n\nImage reference: ${fileName}`
     addBlock(refText, "reference")
@@ -940,6 +1070,27 @@ export default function Page() {
     } : p))
   }, [activeProjectId])
 
+  const handleUpdateSchedule = useCallback(
+    (blockId: string, patch: SchedulePatch, subTaskId?: string) => {
+      updateActiveProject((p) => ({
+        ...p,
+        blocks: p.blocks.map((b) => {
+          if (b.id !== blockId) return b
+          if (subTaskId) {
+            return {
+              ...b,
+              subTasks: b.subTasks?.map((st) =>
+                st.id === subTaskId ? applySchedulePatch(st, patch) : st,
+              ),
+            }
+          }
+          return applySchedulePatch(b, patch)
+        }),
+      }))
+    },
+    [updateActiveProject],
+  )
+
   const handleDeleteSubTask = useCallback((blockId: string, subTaskId: string) => {
     setProjects((current) => current.map(p => p.id === activeProjectId ? {
       ...p,
@@ -1063,8 +1214,13 @@ export default function Page() {
     setIsCommandKOpen(false)
   }, [clearBlocks, addBlock, activeProjectId])
 
+  const showPanelBackdrop =
+    isCompact && (isSidebarOpen || isIndexOpen || isGhostPanelOpen)
+
   return (
     <div className="flex h-dvh overflow-hidden bg-background">
+      <PanelBackdrop visible={showPanelBackdrop} onClose={closeOverlayPanels} />
+
       {/* Hidden file input for .nodepad import */}
       <input
         ref={importInputRef}
@@ -1088,9 +1244,13 @@ export default function Page() {
         onUpdateAISettings={updateSettings}
         openToSettings={jumpToSettings}
         onSettingsOpened={() => setJumpToSettings(false)}
+        workspaceJson={workspaceJson}
+        onPwaImportFile={handlePwaImportFile}
+        onPwaSerialCapture={handleShareImport}
+        onPwaOfflineSummary={(summary) => addBlock(`[Offline summary] ${summary}`, "idea")}
       />
 
-      <div className="flex flex-1 flex-col overflow-hidden min-w-0">
+      <div className="app-main-column flex flex-1 flex-col overflow-hidden min-w-0">
         <StatusBar
           blockCount={blocks.length}
           blocks={blocks}
@@ -1099,9 +1259,10 @@ export default function Page() {
           isGhostPanelOpen={isGhostPanelOpen}
           ghostNoteCount={ghostNotes.filter(n => !n.isGenerating).length}
           activeProjectName={activeProject?.name || ""}
-          onMenuClick={() => setIsSidebarOpen(!isSidebarOpen)}
-          onIndexToggle={() => setIsIndexOpen(!isIndexOpen)}
-          onGhostPanelToggle={() => setIsGhostPanelOpen(prev => !prev)}
+          onMenuClick={toggleSidebar}
+          onIndexToggle={toggleIndex}
+          onGhostPanelToggle={toggleGhostPanel}
+          compact={isCompact}
           modelLabel={isHydrated && aiReady ? currentModel.shortLabel : undefined}
           showHelpTooltip={showHelpTooltip}
           onHelpTooltipDismiss={() => {
@@ -1111,9 +1272,9 @@ export default function Page() {
         />
 
         {isHydrated && !aiReady && (
-          <div className="flex items-center justify-center gap-3 px-4 py-2 bg-amber-950/80 border-b border-amber-800/60 text-amber-200 text-xs shrink-0">
-            <span className="opacity-80">⚡ AI enrichment requires a <strong className="text-amber-200">{providerPreset.label} API key</strong>. Configure it in <strong className="text-amber-200">☰ left panel → Settings</strong>.</span>
-            <div className="flex items-center gap-2 shrink-0">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-center gap-2 sm:gap-3 px-3 sm:px-4 py-2 bg-amber-950/80 border-b border-amber-800/60 text-amber-200 text-xs shrink-0">
+            <span className="opacity-80 leading-relaxed">⚡ AI enrichment requires a <strong className="text-amber-200">{providerPreset.label} API key</strong>. Open <strong className="text-amber-200">☰ → Settings</strong>.</span>
+            <div className="flex items-center gap-2 shrink-0 flex-wrap">
               <button
                 onClick={() => { setIsSidebarOpen(true); setJumpToSettings(true) }}
                 className="px-2.5 py-1 rounded bg-amber-700/60 hover:bg-amber-600/70 text-amber-100 font-medium transition-colors cursor-pointer border border-amber-600/50"
@@ -1134,7 +1295,7 @@ export default function Page() {
           </div>
         )}
 
-        <div className="flex flex-1 overflow-hidden relative">
+        <div className="flex flex-1 overflow-hidden relative min-h-0">
           <main className="relative flex-1 overflow-hidden">
             {isLoaded ? (
               viewMode === "tiling" ? (
@@ -1152,6 +1313,7 @@ export default function Page() {
                   onToggleGroundTruth={handleToggleGroundTruth}
                   onToggleSubTask={handleToggleSubTask}
                   onDeleteSubTask={handleDeleteSubTask}
+                  onUpdateSchedule={handleUpdateSchedule}
                   highlightedBlockId={highlightedBlockId}
                   onHighlight={setHighlightedBlockId}
                 />
@@ -1169,12 +1331,14 @@ export default function Page() {
                   onToggleGroundTruth={handleToggleGroundTruth}
                   onToggleSubTask={handleToggleSubTask}
                   onDeleteSubTask={handleDeleteSubTask}
+                  onUpdateSchedule={handleUpdateSchedule}
                   collapsedIds={new Set(activeProject.collapsedIds)}
                 />
               ) : (
                 <GraphArea
                   key={`graph-${activeProjectId}`}
                   blocks={activeProject.blocks}
+                  knowledgeDocuments={activeProject.knowledgeDocuments ?? []}
                   ghostNote={ghostNotes[ghostNotes.length - 1]}
                   projectName={activeProject.name}
                   onReEnrich={reEnrichBlock}
@@ -1194,9 +1358,11 @@ export default function Page() {
 
           <GhostPanel
             ghostNotes={ghostNotes}
+            knowledgeSuggestions={knowledgeGapSuggestions}
             isOpen={isGhostPanelOpen}
             onClose={() => setIsGhostPanelOpen(false)}
             onClaim={claimGhostNote}
+            onAddKnowledgeSuggestion={(text) => addBlock(text, "reference")}
             onDismiss={dismissGhostNote}
           />
         </div>
@@ -1211,12 +1377,14 @@ export default function Page() {
               transition={{ duration: 0.15, ease: "easeOut" }}
               className="absolute bottom-[72px] left-1/2 -translate-x-1/2 z-[130] pointer-events-none"
             >
-              <div className="px-3 py-1.5 rounded-sm bg-black/90 border border-white/15 backdrop-blur-md shadow-xl">
-                <span className="font-mono text-[10px] text-white/70 tracking-tight whitespace-nowrap">{undoToast}</span>
+              <div className="px-3 py-1.5 rounded-sm bg-popover border border-border backdrop-blur-md shadow-xl">
+                <span className="font-mono text-[10px] text-muted-foreground tracking-tight whitespace-nowrap">{undoToast}</span>
               </div>
             </motion.div>
           )}
         </AnimatePresence>
+
+        <ViewModeBar value={viewMode} onChange={setViewMode} />
 
         <VimInput
           onSubmit={addBlock}
@@ -1225,6 +1393,7 @@ export default function Page() {
           onCommand={handleCommand}
           isCommandKOpen={isCommandKOpen}
           setIsCommandKOpen={setIsCommandKOpen}
+          compact={isCompact}
         />
       </div>
 
@@ -1237,8 +1406,18 @@ export default function Page() {
         viewMode={viewMode}
       />
 
-      {/* First-visit intro video modal */}
+      <PwaRuntime
+        projects={projects}
+        isLoaded={isLoaded}
+        onShortcut={handlePwaShortcut}
+        onShareNote={handleShareImport}
+      />
+
+      <ReminderEngine projects={projects} />
+
       <IntroModal open={isIntroOpen} onClose={handleIntroClose} />
+
+      <AdsRuntime anchorSuppressed={isCommandKOpen || isIntroOpen} />
     </div>
   )
 }

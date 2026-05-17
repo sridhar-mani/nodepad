@@ -20,6 +20,7 @@ interface KanbanAreaProps {
   onToggleGroundTruth: (id: string) => void
   onToggleSubTask: (id: string, subTaskId: string) => void
   onDeleteSubTask: (id: string, subTaskId: string) => void
+  onUpdateSchedule?: (id: string, patch: import("@/lib/scheduling").SchedulePatch, subTaskId?: string) => void
   collapsedIds: Set<string>
 }
 
@@ -35,6 +36,7 @@ export function KanbanArea({
   onToggleGroundTruth,
   onToggleSubTask,
   onDeleteSubTask,
+  onUpdateSchedule,
   collapsedIds,
 }: KanbanAreaProps) {
   const mod = useModKey()
@@ -114,7 +116,7 @@ export function KanbanArea({
       {/* Scrollable Container */}
       <div 
         ref={containerRef}
-        className="flex h-full w-full overflow-x-auto custom-scrollbar p-3 pb-4 gap-4 sm:p-6 sm:pb-6 sm:gap-8"
+        className="flex h-full w-full overflow-x-auto snap-x-mandatory custom-scrollbar p-3 pb-4 gap-4 sm:p-5 sm:pb-5 sm:gap-6 lg:p-6 lg:pb-6 lg:gap-8"
       >
         <AnimatePresence mode="popLayout">
           {columns.map(([key, col]) => (
@@ -125,7 +127,7 @@ export function KanbanArea({
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: -20 }}
-              className="flex flex-col w-[84vw] sm:w-96 shrink-0 h-full max-h-full pb-2"
+              className="snap-col flex flex-col w-[min(84vw,22rem)] sm:w-80 md:w-[22rem] lg:w-96 shrink-0 h-full max-h-full pb-2"
             >
               {/* Column Header */}
               <div className="flex items-center justify-between px-2 py-1 border-b border-border/40">
@@ -162,6 +164,7 @@ export function KanbanArea({
                         onToggleGroundTruth={onToggleGroundTruth}
                         onToggleSubTask={onToggleSubTask}
                         onDeleteSubTask={onDeleteSubTask}
+                        onUpdateSchedule={onUpdateSchedule}
                         onConnectionHover={handleConnectionHover}
                         onConnectionLock={handleConnectionLock}
                         isConnectionLocked={lockedConnectionId === block.id}

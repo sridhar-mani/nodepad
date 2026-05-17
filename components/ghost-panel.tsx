@@ -1,7 +1,8 @@
 "use client"
 
 import { AnimatePresence, motion } from "framer-motion"
-import { Check, Sparkles, X } from "lucide-react"
+import { Check, BookOpen, Sparkles, X } from "lucide-react"
+import type { KnowledgeGapSuggestion } from "@/lib/knowledge-graph"
 
 export interface GhostNote {
   id: string
@@ -12,13 +13,23 @@ export interface GhostNote {
 
 interface GhostPanelProps {
   ghostNotes: GhostNote[]
+  knowledgeSuggestions?: KnowledgeGapSuggestion[]
   isOpen: boolean
   onClose: () => void
   onClaim: (id: string) => void
   onDismiss: (id: string) => void
+  onAddKnowledgeSuggestion?: (text: string) => void
 }
 
-export function GhostPanel({ ghostNotes, isOpen, onClose, onClaim, onDismiss }: GhostPanelProps) {
+export function GhostPanel({
+  ghostNotes,
+  knowledgeSuggestions = [],
+  isOpen,
+  onClose,
+  onClaim,
+  onDismiss,
+  onAddKnowledgeSuggestion,
+}: GhostPanelProps) {
   return (
     <div
       style={{
@@ -26,9 +37,9 @@ export function GhostPanel({ ghostNotes, isOpen, onClose, onClaim, onDismiss }: 
         opacity: isOpen ? 1 : 0,
         visibility: isOpen ? "visible" : "hidden",
       }}
-      className="fixed inset-y-0 right-0 z-50 flex flex-col h-[100dvh] w-[min(92vw,17rem)] bg-black/20 backdrop-blur-3xl border-l border-border shrink-0 overflow-hidden transition-all duration-200 ease-in-out md:static md:h-full md:w-auto"
+      className="fixed inset-y-0 right-0 z-[51] flex flex-col h-[100dvh] w-[min(92vw,20rem)] sm:w-[min(88vw,17rem)] bg-card/95 backdrop-blur-3xl border-l border-border shrink-0 overflow-hidden transition-all duration-200 ease-in-out lg:static lg:z-auto lg:h-full lg:w-auto lg:bg-card/80"
     >
-      <div className="w-full md:w-[272px] flex flex-col h-full">
+      <div className="w-full lg:w-[272px] flex flex-col h-full">
         {/* Header */}
         <div className="flex h-10 items-center justify-between border-b border-border bg-card/5 px-3 py-1.5 shrink-0">
           <div className="flex items-center gap-2">
@@ -46,7 +57,7 @@ export function GhostPanel({ ghostNotes, isOpen, onClose, onClaim, onDismiss }: 
           </div>
           <button
             onClick={onClose}
-            className="p-1 px-1.5 hover:bg-white/5 rounded-sm transition-colors text-muted-foreground/30 hover:text-white"
+            className="p-1 px-1.5 hover:bg-secondary rounded-sm transition-colors text-muted-foreground/30 hover:text-foreground"
           >
             <X className="h-3.5 w-3.5" />
           </button>
@@ -125,6 +136,47 @@ export function GhostPanel({ ghostNotes, isOpen, onClose, onClaim, onDismiss }: 
             </AnimatePresence>
           )}
         </div>
+
+        {knowledgeSuggestions.length > 0 && (
+          <div className="border-t border-border/30 px-3 py-3 space-y-2 shrink-0 max-h-[40%] overflow-y-auto custom-scrollbar">
+            <div className="flex items-center gap-1.5">
+              <BookOpen className="h-3 w-3 text-[var(--type-reference)]" />
+              <span className="font-mono text-[8px] font-bold uppercase tracking-widest text-muted-foreground/50">
+                Knowledge matches
+              </span>
+            </div>
+            {knowledgeSuggestions.map((s) => (
+              <div
+                key={`${s.blockId}-${s.docId}`}
+                className="rounded-sm border border-[var(--type-reference)]/20 bg-[var(--type-reference)]/5 p-2.5 space-y-2"
+              >
+                <p className="text-[11px] text-foreground/70 leading-snug">
+                  <span className="text-muted-foreground/50">Note:</span> {s.blockPreview}
+                  {s.blockPreview.length >= 80 ? "…" : ""}
+                </p>
+                <p className="text-[11px] text-foreground/80 leading-snug">
+                  <span className="text-[var(--type-reference)]/80">{s.docTitle}</span>
+                  {" — "}
+                  {s.snippet}
+                  {s.snippet.length >= 160 ? "…" : ""}
+                </p>
+                {onAddKnowledgeSuggestion && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      onAddKnowledgeSuggestion(
+                        `[KB: ${s.docTitle}] ${s.snippet}`,
+                      )
+                    }
+                    className="w-full rounded-sm border border-[var(--type-reference)]/25 bg-[var(--type-reference)]/10 py-1 font-mono text-[8px] font-bold uppercase tracking-wider text-[var(--type-reference)] hover:bg-[var(--type-reference)]/20 transition-colors"
+                  >
+                    Add as note
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
 
         {/* Footer */}
         <div className="border-t border-border/30 px-3 py-2 shrink-0">

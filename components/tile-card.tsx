@@ -2,11 +2,14 @@
 
 import { useState, useRef, useEffect, useCallback, useMemo, memo } from "react"
 import { createPortal } from "react-dom"
-import { X, Check, Pin, RefreshCw, ChevronDown, ChevronRight, ChevronLeft, Link as LinkIcon, Sparkles, Tag, Volume2, Square, ShieldCheck } from "lucide-react"
+import { X, Check, Pin, RefreshCw, ChevronDown, ChevronRight, ChevronLeft, Link as LinkIcon, Sparkles, Tag, Volume2, Square, ShieldCheck, AlarmClock } from "lucide-react"
+import { SchedulePopover } from "@/components/schedule-popover"
+import { formatDueLabel, formatTimerRemaining, type SchedulePatch } from "@/lib/scheduling"
 import { motion } from "framer-motion"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 import { CONTENT_TYPE_CONFIG, type ContentType } from "@/lib/content-types"
+import { normalizeConfidencePercent } from "@/lib/confidence"
 
 export interface TextBlock {
   id: string
@@ -24,7 +27,18 @@ export interface TextBlock {
   isUnrelated?: boolean
   isGroundTruth?: boolean
   isPinned?: boolean
-  subTasks?: { id: string; text: string; isDone: boolean; timestamp: number }[]
+  dueAt?: number
+  reminderAt?: number
+  timerEndsAt?: number
+  subTasks?: {
+    id: string
+    text: string
+    isDone: boolean
+    timestamp: number
+    dueAt?: number
+    reminderAt?: number
+    timerEndsAt?: number
+  }[]
 }
 
 interface TileCardProps {
@@ -47,6 +61,7 @@ interface TileCardProps {
   isConnectionLocked?: boolean
   allBlocks?: TextBlock[]
   onChangeType?: (id: string, newType: ContentType) => void
+  onUpdateSchedule?: (id: string, patch: SchedulePatch, subTaskId?: string) => void
 }
 
 // Custom Markdown components for styling
@@ -104,6 +119,7 @@ export const TileCard = memo(function TileCard({
   allBlocks,
   hideCollapse = false,
   onChangeType,
+  onUpdateSchedule,
 }: TileCardProps) {
   // In tiling view, collapse is disabled — BSP layout can't redistribute freed space
   const effectiveCollapsed = hideCollapse ? false : isCollapsed
@@ -116,6 +132,8 @@ export const TileCard = memo(function TileCard({
   const [isFooterExpanded, setIsFooterExpanded] = useState(false)
   const [editingMinHeight, setEditingMinHeight] = useState<number | undefined>(undefined)
   const [isTypePickerOpen, setIsTypePickerOpen] = useState(false)
+  const [scheduleOpen, setScheduleOpen] = useState(false)
+  const scheduleRef = useRef<HTMLDivElement>(null)
   const [isSpeaking, setIsSpeaking] = useState(false)
   const [pickerRect, setPickerRect] = useState<DOMRect | null>(null)
   const typeChangeButtonRef = useRef<HTMLButtonElement>(null)
@@ -600,7 +618,7 @@ export const TileCard = memo(function TileCard({
                       {isTask && block.subTasks ? (
                         <div className="flex flex-col gap-2">
                           {block.subTasks.map(st => (
-                            <div key={st.id} className="group/task flex items-start gap-3 rounded-md bg-white/5 p-2 transition-colors hover:bg-white/10">
+                            <div key={st.id} className="group/task flex items-start gap-3 rounded-md bg-secondary/40 p-2 transition-colors hover:bg-secondary/60">
                               <button
                                 onClick={() => onToggleSubTask?.(block.id, st.id)}
                                 className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-all`} style={{ backgroundColor: st.isDone ? 'var(--type-task)' : 'transparent', borderColor: st.isDone ? 'var(--type-task)' : 'color-mix(in oklch, var(--type-task) 50%, transparent)' }}
@@ -673,13 +691,13 @@ export const TileCard = memo(function TileCard({
               <div className={`px-3 pb-2 flex-shrink-0 transition-opacity duration-300 ${isHovered ? "opacity-100" : "opacity-0"}`}>
                 <div className="flex items-center justify-between mb-1">
                   <span className="font-mono text-[9px] text-muted-foreground">Confidence</span>
-                  <span className="font-mono text-[9px] text-muted-foreground">{Math.round(block.confidence)}%</span>
+                  <span className="font-mono text-[9px] text-muted-foreground">{normalizeConfidencePercent(block.confidence) ?? 0}%</span>
                 </div>
                 <div className="h-0.5 w-full overflow-hidden rounded-full bg-secondary">
                   <div
                     className="h-full rounded-full transition-all"
                     style={{
-                      width: `${Math.max(5, block.confidence)}%`,
+                      width: `${Math.max(5, normalizeConfidencePercent(block.confidence) ?? 0)}%`,
                       background: accent,
                       opacity: 0.6,
                     }}
@@ -693,7 +711,7 @@ export const TileCard = memo(function TileCard({
             <div
               ref={footerRef}
               className={`relative flex flex-shrink-0 flex-col transition-all duration-300 ease-in-out ${
-                isFooterExpanded ? "bg-secondary/40" : "bg-black/25"
+                isFooterExpanded ? "bg-secondary/40" : "bg-secondary/20"
               }`}
               style={{
                 borderTop: "1px solid var(--border)",
@@ -735,8 +753,8 @@ export const TileCard = memo(function TileCard({
                         </div>
 
                         {/* Hover Tooltip */}
-                        <div className="absolute bottom-full left-0 mb-2 w-56 p-2 rounded-sm bg-black/90 backdrop-blur-md border border-white/10 shadow-xl opacity-0 translate-y-2 pointer-events-none group-hover/influences:opacity-100 group-hover/influences:translate-y-0 transition-all z-[100]">
-                          <h5 className="font-mono text-[8px] font-bold text-muted-foreground uppercase tracking-widest mb-1.5 border-b border-white/5 pb-1">Connected nodes</h5>
+                        <div className="absolute bottom-full left-0 mb-2 w-56 p-2 rounded-sm bg-popover backdrop-blur-md border border-border shadow-xl opacity-0 translate-y-2 pointer-events-none group-hover/influences:opacity-100 group-hover/influences:translate-y-0 transition-all z-[100]">
+                          <h5 className="font-mono text-[8px] font-bold text-muted-foreground uppercase tracking-widest mb-1.5 border-b border-border pb-1">Connected nodes</h5>
                           <div className="flex flex-col gap-1">
                             {block.influencedBy.slice(0, 5).map((id, i) => {
                               const linked = allBlocks?.find(b => b.id === id)
@@ -760,6 +778,37 @@ export const TileCard = memo(function TileCard({
                 </div>
 
                 <div className="flex items-center gap-2 shrink-0">
+                  {(isTask || block.dueAt || block.timerEndsAt) && onUpdateSchedule && (
+                    <div ref={scheduleRef} className="relative">
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); setScheduleOpen((v) => !v) }}
+                        className="rounded-sm p-1 text-muted-foreground hover:text-[var(--type-task)] hover:bg-secondary/60 transition-colors"
+                        title="Deadline & timer"
+                      >
+                        <AlarmClock className="h-3.5 w-3.5" />
+                      </button>
+                      {scheduleOpen && (
+                        <SchedulePopover
+                          dueAt={block.dueAt}
+                          reminderAt={block.reminderAt}
+                          timerEndsAt={block.timerEndsAt}
+                          onClose={() => setScheduleOpen(false)}
+                          onSave={(patch) => {
+                            onUpdateSchedule(block.id, patch)
+                            setScheduleOpen(false)
+                          }}
+                        />
+                      )}
+                    </div>
+                  )}
+                  {(block.dueAt || block.timerEndsAt) && (
+                    <span className="font-mono text-[8px] text-muted-foreground max-w-[100px] truncate hidden sm:inline">
+                      {block.dueAt ? formatDueLabel(block.dueAt) : ""}
+                      {block.dueAt && block.timerEndsAt ? " · " : ""}
+                      {block.timerEndsAt ? formatTimerRemaining(block.timerEndsAt) : ""}
+                    </span>
+                  )}
                   {block.influencedBy && block.influencedBy.length > 1 && (
                     <button
                       onClick={() => setIsFooterExpanded(!isFooterExpanded)}

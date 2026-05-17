@@ -9,10 +9,16 @@ interface IntroModalProps {
   onClose: () => void
 }
 
+const STEPS = [
+  { title: "Capture", body: "Type a thought, question, or paste a URL in the bar at the bottom. No prompts required." },
+  { title: "Enrich", body: "Each note is classified and annotated in context with your canvas and uploaded knowledge." },
+  { title: "Connect", body: "Switch to Graph view to see note links and knowledge-base connections." },
+  { title: "Synthesize", body: "After a few notes, emergent theses appear in the Synthesis panel (sparkle icon)." },
+]
+
 export function IntroModal({ open, onClose }: IntroModalProps) {
   const overlayRef = useRef<HTMLDivElement>(null)
 
-  // Close on Escape
   useEffect(() => {
     if (!open) return
     const handle = (e: KeyboardEvent) => { if (e.key === "Escape") onClose() }
@@ -20,7 +26,6 @@ export function IntroModal({ open, onClose }: IntroModalProps) {
     return () => window.removeEventListener("keydown", handle)
   }, [open, onClose])
 
-  // Prevent body scroll while open
   useEffect(() => {
     if (open) document.body.style.overflow = "hidden"
     else document.body.style.overflow = ""
@@ -36,7 +41,7 @@ export function IntroModal({ open, onClose }: IntroModalProps) {
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.25 }}
-          className="fixed inset-0 z-[500] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
+          className="fixed inset-0 z-[500] flex items-center justify-center bg-background/80 backdrop-blur-sm p-4"
           onClick={(e) => { if (e.target === overlayRef.current) onClose() }}
         >
           <motion.div
@@ -44,9 +49,8 @@ export function IntroModal({ open, onClose }: IntroModalProps) {
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.96, y: 8 }}
             transition={{ duration: 0.25, ease: "easeOut" }}
-            className="relative w-full max-w-3xl bg-[#0d0d0d] border border-white/10 rounded-sm shadow-2xl overflow-hidden"
+            className="surface-modal relative w-full max-w-lg rounded-sm shadow-2xl overflow-hidden"
           >
-            {/* Header */}
             <div className="flex items-center justify-between px-6 pt-6 pb-4">
               <div>
                 <div className="flex items-center gap-2 mb-1">
@@ -58,7 +62,7 @@ export function IntroModal({ open, onClose }: IntroModalProps) {
                   <span className="font-mono text-sm font-black text-foreground tracking-tight">nodepad</span>
                 </div>
                 <p className="text-xs text-muted-foreground/60 font-mono uppercase tracking-widest">
-                  A quick introduction
+                  Quick start
                 </p>
               </div>
               <button
@@ -70,27 +74,29 @@ export function IntroModal({ open, onClose }: IntroModalProps) {
               </button>
             </div>
 
-            {/* Video embed — 16:9 */}
-            <div className="relative w-full" style={{ paddingBottom: "56.25%" }}>
-              <iframe
-                className="absolute inset-0 w-full h-full"
-                src="https://www.youtube-nocookie.com/embed/nCLY7rHAjWE?autoplay=1&rel=0&modestbranding=1&color=white"
-                title="nodepad introduction"
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                allowFullScreen
-              />
+            <div className="px-6 pb-4 space-y-4">
+              {STEPS.map((step, i) => (
+                <div key={step.title} className="flex gap-3">
+                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-sm bg-primary/10 border border-primary/20 font-mono text-[10px] font-black text-primary">
+                    {i + 1}
+                  </span>
+                  <div>
+                    <p className="text-sm font-semibold text-foreground">{step.title}</p>
+                    <p className="text-sm text-muted-foreground leading-relaxed mt-0.5">{step.body}</p>
+                  </div>
+                </div>
+              ))}
             </div>
 
-            {/* Footer */}
-            <div className="flex items-center justify-between px-6 py-4 border-t border-white/[0.06]">
+            <div className="flex items-center justify-between px-6 py-4 border-t border-border">
               <p className="text-xs text-muted-foreground/40">
-                You can replay this anytime via the <span className="font-mono font-black text-muted-foreground/60">?</span> button
+                Open <span className="font-mono font-black text-muted-foreground/60">?</span> anytime for full help
               </p>
               <button
                 onClick={onClose}
-                className="px-4 py-1.5 text-xs font-mono font-medium rounded-sm bg-white/8 hover:bg-white/15 text-foreground/70 hover:text-foreground border border-white/10 hover:border-white/20 transition-all"
+                className="px-4 py-1.5 text-xs font-mono font-medium rounded-sm bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20 transition-all"
               >
-                Skip to app →
+                Get started →
               </button>
             </div>
           </motion.div>

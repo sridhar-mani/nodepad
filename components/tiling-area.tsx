@@ -5,9 +5,14 @@ import { TileCard, type TextBlock } from "@/components/tile-card"
 import { CONTENT_TYPE_CONFIG, type ContentType } from "@/lib/content-types"
 import { getRelatedIds, useModKey } from "@/lib/utils"
 import { TilingMinimap } from "./tiling-minimap"
+import { AdSlot } from "@/components/ad-slot"
+import { useViewport } from "@/lib/use-viewport"
 
-/** Number of tiles per BSP page */
-const PAGE_SIZE = 7
+function pageSizeForTier(tier: "mobile" | "tablet" | "desktop") {
+  if (tier === "mobile") return 3
+  if (tier === "tablet") return 5
+  return 7
+}
 
 // Pure BSP helpers — defined outside the component so they are never recreated
 function getWeight(n: BSPNode): number {
@@ -15,7 +20,7 @@ function getWeight(n: BSPNode): number {
   return getWeight(n.left!) + getWeight(n.right!)
 }
 
-function buildPageTree(pageBlocks: TextBlock[], depth: number = 0): BSPNode {
+function buildPageTree(pageBlocks: TextBlock[], depth: number = 0, stackTiles = false): BSPNode {
   if (pageBlocks.length === 1) {
     return { id: pageBlocks[0].id, type: 'leaf', blockId: pageBlocks[0].id }
   }
@@ -23,9 +28,9 @@ function buildPageTree(pageBlocks: TextBlock[], depth: number = 0): BSPNode {
   return {
     id: `split-${depth}-${pageBlocks[0].id}`,
     type: 'split',
-    direction: depth % 2 === 0 ? 'v' : 'h',
-    left: buildPageTree(pageBlocks.slice(0, mid), depth + 1),
-    right: buildPageTree(pageBlocks.slice(mid), depth + 1)
+    direction: stackTiles ? 'h' : (depth % 2 === 0 ? 'v' : 'h'),
+    left: buildPageTree(pageBlocks.slice(0, mid), depth + 1, stackTiles),
+    right: buildPageTree(pageBlocks.slice(mid), depth + 1, stackTiles)
   }
 }
 
@@ -51,6 +56,7 @@ interface TilingAreaProps {
   onToggleGroundTruth: (id: string) => void
   onToggleSubTask: (id: string, subTaskId: string) => void
   onDeleteSubTask: (id: string, subTaskId: string) => void
+  onUpdateSchedule?: (id: string, patch: import("@/lib/scheduling").SchedulePatch, subTaskId?: string) => void
   highlightedBlockId?: string | null
   onHighlight: (id: string | null) => void
 }
@@ -68,10 +74,14 @@ export function TilingArea({
   onToggleGroundTruth,
   onToggleSubTask,
   onDeleteSubTask,
+  onUpdateSchedule,
   highlightedBlockId,
   onHighlight,
 }: TilingAreaProps) {
   const mod = useModKey()
+  const { tier, isCompact } = useViewport()
+  const pageSize = pageSizeForTier(tier)
+  const stackTiles = isCompact
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const [activePageIdx, setActivePageIdx] = useState(0)
   const [hoveredConnectionId, setHoveredConnectionId] = useState<string | null>(null)
@@ -119,15 +129,15 @@ export function TilingArea({
       })
     if (gridBlocks.length === 0) return []
     const chunks: TextBlock[][] = []
-    for (let i = 0; i < gridBlocks.length; i += PAGE_SIZE) {
-      chunks.push(gridBlocks.slice(i, i + PAGE_SIZE))
+    for (let i = 0; i < gridBlocks.length; i += pageSize) {
+      chunks.push(gridBlocks.slice(i, i + pageSize))
     }
     return chunks
-  }, [blocks])
+  }, [blocks, pageSize])
 
   const pageTrees = useMemo(() => {
-    return chunkedPages.map(page => buildPageTree(page))
-  }, [chunkedPages])
+    return chunkedPages.map(page => buildPageTree(page, 0, stackTiles))
+  }, [chunkedPages, stackTiles])
 
   const taskBlock = useMemo(() => blocks.find((b: TextBlock) => b.contentType === "task"), [blocks])
 
@@ -202,6 +212,7 @@ export function TilingArea({
               onToggleGroundTruth={onToggleGroundTruth}
               onToggleSubTask={onToggleSubTask}
               onDeleteSubTask={onDeleteSubTask}
+              onUpdateSchedule={onUpdateSchedule}
               isHighlighted={highlightedBlockId === block.id}
               onHighlight={onHighlight}
               onConnectionHover={handleConnectionHover}
@@ -250,6 +261,7 @@ export function TilingArea({
               onToggleGroundTruth={onToggleGroundTruth}
               onToggleSubTask={onToggleSubTask}
               onDeleteSubTask={onDeleteSubTask}
+              onUpdateSchedule={onUpdateSchedule}
               isHighlighted={highlightedBlockId === taskBlock.id}
               onHighlight={onHighlight}
               onConnectionHover={handleConnectionHover}
@@ -274,7 +286,9 @@ export function TilingArea({
             {pageTrees.map((tree, idx) => {
               const count = chunkedPages[idx].length
               // Elastic height: if only 1 tile, don't take a whole screen
-              const heightClass = count <= 2 ? 'h-[220px] sm:h-[300px]' : count <= 4 ? 'h-[45vh] sm:h-[60vh]' : 'h-[85dvh] sm:h-screen'
+              const heightClass = stackTiles
+                ? count <= 1 ? 'min-h-[200px]' : count <= 2 ? 'min-h-[280px]' : 'min-h-[360px]'
+                : count <= 2 ? 'h-[220px] sm:h-[300px]' : count <= 4 ? 'h-[45vh] sm:h-[55vh] lg:h-[60vh]' : 'h-[80dvh] lg:h-screen'
               return (
                 <div
                   key={idx}
@@ -312,6 +326,10 @@ export function TilingArea({
               ))}
             </div>
 
+
+            <div className="w-full max-w-sm pointer-events-auto">
+              <AdSlot placement="empty" />
+            </div>
 
             <p className="text-[13px] text-foreground/65 uppercase tracking-[0.15em] whitespace-nowrap">
               {`type anything · #type to classify · ${mod}K for commands`}

@@ -5,9 +5,12 @@
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
-  "background_color": "#0a0a0a",
-  "theme_color": "#0a0a0a",
+  "display_override": ["window-controls-overlay", "standalone", "browser"],
+  "orientation": "any",
+  "background_color": "#f7f8fa",
+  "theme_color": "#3d9b6e",
   "lang": "en",
+  "categories": ["productivity", "education"],
   "icons": [
     {
       "src": "/icon.svg",
@@ -19,7 +22,7 @@
       "src": "/nodepad.jpg",
       "sizes": "512x512",
       "type": "image/jpeg",
-      "purpose": "any"
+      "purpose": "any maskable"
     }
   ],
   "screenshots": [
@@ -28,6 +31,49 @@
       "sizes": "1366x768",
       "type": "image/jpeg",
       "form_factor": "wide"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Capture note",
+      "short_name": "Note",
+      "description": "Focus the entry bar",
+      "url": "/?shortcut=capture",
+      "icons": [{ "src": "/icon.svg", "sizes": "96x96", "type": "image/svg+xml" }]
+    },
+    {
+      "name": "Graph view",
+      "short_name": "Graph",
+      "url": "/?view=graph",
+      "icons": [{ "src": "/icon.svg", "sizes": "96x96", "type": "image/svg+xml" }]
+    },
+    {
+      "name": "Synthesis panel",
+      "short_name": "Synthesis",
+      "url": "/?shortcut=synthesis",
+      "icons": [{ "src": "/icon.svg", "sizes": "96x96", "type": "image/svg+xml" }]
+    },
+    {
+      "name": "Settings",
+      "short_name": "Settings",
+      "url": "/?shortcut=settings",
+      "icons": [{ "src": "/icon.svg", "sizes": "96x96", "type": "image/svg+xml" }]
+    }
+  ],
+  "share_target": {
+    "action": "/share",
+    "method": "GET",
+    "enctype": "application/x-www-form-urlencoded",
+    "params": {
+      "title": "title",
+      "text": "text",
+      "url": "url"
+    }
+  },
+  "protocol_handlers": [
+    {
+      "protocol": "web+nodepad",
+      "url": "/?shortcut=import&url=%s"
     }
   ]
 }

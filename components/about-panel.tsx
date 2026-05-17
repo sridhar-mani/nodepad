@@ -7,6 +7,8 @@ import {
   FolderInput, Download, Brain, Zap, Globe, Search
 } from "lucide-react"
 import { useModKey } from "@/lib/utils"
+import { AdSlot } from "@/components/ad-slot"
+import { setAdsHiddenByUser } from "@/lib/ads-config"
 
 interface AboutPanelProps {
   open: boolean
@@ -94,19 +96,6 @@ export function AboutPanel({ open, onClose }: AboutPanelProps) {
         {/* Scrollable body */}
         <div className="flex-1 overflow-y-auto px-8 py-6 space-y-8">
 
-          {/* Intro video */}
-          <Section title="Watch the intro">
-            <div className="relative w-full rounded-sm overflow-hidden border border-border/50" style={{ paddingBottom: "56.25%" }}>
-              <iframe
-                className="absolute inset-0 w-full h-full"
-                src="https://www.youtube-nocookie.com/embed/nCLY7rHAjWE?rel=0&modestbranding=1&color=white"
-                title="nodepad introduction"
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                allowFullScreen
-              />
-            </div>
-          </Section>
-
           {/* The idea */}
           <Section title="The idea">
             <p className="text-sm text-muted-foreground leading-relaxed">
@@ -185,7 +174,7 @@ export function AboutPanel({ open, onClose }: AboutPanelProps) {
                 <GitFork className="h-4 w-4 flex-shrink-0 text-primary mt-0.5" />
                 <div>
                   <p className="text-sm font-semibold text-foreground mb-0.5">Graph <span className="font-mono text-[10px] text-muted-foreground/50 ml-1">{mod}3</span></p>
-                  <p className="text-sm text-muted-foreground">An interactive force-directed graph of all your nodes. Connections between them become the focus — highly-connected nodes drift toward the centre, isolated ones settle at the periphery. Click any node to open its full detail panel. Hover to dim unrelated nodes.</p>
+                  <p className="text-sm text-muted-foreground">An interactive force-directed graph of your notes plus uploaded knowledge documents. Note-to-note links and knowledge-base links (solid or dashed when inferred) appear together. Highly-connected notes drift toward the centre; knowledge docs sit on the outer ring. Click any node for details.</p>
                 </div>
               </div>
             </div>
@@ -270,6 +259,12 @@ export function AboutPanel({ open, onClose }: AboutPanelProps) {
               ))}
             </ul>
           </Section>
+
+          <AdSlot
+            placement="about"
+            className="mb-4"
+            onDismiss={() => setAdsHiddenByUser(true)}
+          />
 
           {/* Footer */}
           <div className="pt-2 pb-4 border-t border-border">

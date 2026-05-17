@@ -22,6 +22,16 @@ import {
 } from "lucide-react"
 import { ThemeToggle } from './theme-toggle'
 import {
+  getNotificationSupport,
+  loadNotificationPrefs,
+  requestNotificationPermission,
+  saveNotificationPrefs,
+} from "@/lib/notifications"
+import { AdsPrefsRow } from "@/components/ads-prefs-sync"
+import { AdSlot } from "@/components/ad-slot"
+import { setAdsHiddenByUser } from "@/lib/ads-config"
+import { PwaFeaturesPanel } from "@/components/pwa-features-panel"
+import {
   AI_PROVIDER_PRESETS,
   MODEL_PRESETS,
   fetchProviderModelsFromRegistry,
@@ -55,6 +65,10 @@ interface ProjectSidebarProps {
   // AI Settings
   aiSettings: AISettings
   onUpdateAISettings: (patch: Partial<AISettings>) => void
+  workspaceJson?: string
+  onPwaImportFile?: (file: File) => void
+  onPwaSerialCapture?: (text: string) => void
+  onPwaOfflineSummary?: (summary: string) => void
 }
 
 export function ProjectSidebar({
@@ -71,6 +85,10 @@ export function ProjectSidebar({
   onUpdateAISettings,
   openToSettings,
   onSettingsOpened,
+  workspaceJson,
+  onPwaImportFile,
+  onPwaSerialCapture,
+  onPwaOfflineSummary,
 }: ProjectSidebarProps) {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editName, setEditName] = useState("")
@@ -90,6 +108,8 @@ export function ProjectSidebar({
   const [ollamaLoading, setOllamaLoading] = useState(false)
   const [ollamaError, setOllamaError] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+  const [notifPrefs, setNotifPrefs] = useState(() => loadNotificationPrefs())
+  const [notifPermission, setNotifPermission] = useState<NotificationPermission | "unsupported">("default")
   const [themeChoice, setThemeChoice] = useState<'system'|'light'|'dark'>(() => {
     try {
       const t = typeof window !== 'undefined' ? localStorage.getItem('theme') : null
@@ -110,6 +130,8 @@ export function ProjectSidebar({
       setDraft(aiSettings)
       setRegistryModels([])
       setRegistryModelError(null)
+      setNotifPrefs(loadNotificationPrefs())
+      setNotifPermission(getNotificationSupport())
       // sync theme choice when opening settings
       try {
         const t = typeof window !== 'undefined' ? localStorage.getItem('theme') : null
@@ -240,9 +262,9 @@ export function ProjectSidebar({
         opacity: isOpen ? 1 : 0,
         visibility: isOpen ? "visible" : "hidden"
       }}
-      className="fixed inset-y-0 left-0 z-50 transition-all duration-200 ease-in-out overflow-hidden border-r border-border bg-card/85 backdrop-blur-3xl flex flex-col h-[100dvh] w-[min(88vw,18rem)] md:static md:h-full md:w-auto"
+      className="fixed inset-y-0 left-0 z-[52] transition-all duration-200 ease-in-out overflow-hidden border-r border-border bg-card/95 backdrop-blur-3xl flex flex-col h-[100dvh] w-[min(92vw,20rem)] sm:w-[min(88vw,17.5rem)] lg:static lg:z-auto lg:h-full lg:w-auto lg:bg-card/85"
     >
-      <div className="w-full md:w-[240px] flex flex-col h-full">
+      <div className="w-full lg:w-[240px] flex flex-col h-full">
         {/* Header */}
         <div className="flex h-10 items-center justify-between border-b border-border bg-card/70 backdrop-blur-md px-3 py-1.5 shrink-0">
           <div className="flex items-center gap-2.5">
@@ -414,7 +436,7 @@ export function ProjectSidebar({
                           animate={{ opacity: 1, y: 0 }}
                           exit={{ opacity: 0, y: -4 }}
                           transition={{ duration: 0.1 }}
-                          className="absolute top-full left-0 right-0 z-20 mt-1 overflow-hidden rounded-md border border-white/10 bg-[#0d0d10] shadow-xl"
+                          className="absolute top-full left-0 right-0 z-20 mt-1 overflow-hidden rounded-md border border-white/10 bg-popover shadow-xl"
                         >
                           {AI_PROVIDER_PRESETS.map(preset => (
                             <button
@@ -506,6 +528,74 @@ export function ProjectSidebar({
                   </p>
                 </div>
 
+                {/* Notifications (PWA) */}
+                <div className="flex flex-col gap-2">
+                  <label className="font-mono text-[9px] font-bold uppercase tracking-[0.2em] text-muted-foreground">
+                    Reminders &amp; PWA
+                  </label>
+                  <p className="font-mono text-[9px] text-muted-foreground leading-relaxed">
+                    Enable browser notifications for deadlines, reminders, and focus timers. Works when the app is installed or open.
+                  </p>
+                  <div className="flex items-center justify-between rounded-md border border-border bg-secondary/40 px-2.5 py-2">
+                    <span className="font-mono text-[10px] text-foreground">Local notifications</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const next = { ...notifPrefs, enabled: !notifPrefs.enabled }
+                        setNotifPrefs(next)
+                        saveNotificationPrefs(next)
+                      }}
+                      className={`relative h-5 w-9 rounded-full transition-colors ${notifPrefs.enabled ? "bg-primary" : "bg-muted"}`}
+                    >
+                      <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-all ${notifPrefs.enabled ? "left-5" : "left-0.5"}`} />
+                    </button>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const p = await requestNotificationPermission()
+                      setNotifPermission(p)
+                    }}
+                    disabled={notifPermission === "unsupported"}
+                    className="w-full rounded-md border border-border bg-secondary/40 px-2.5 py-2 font-mono text-[10px] text-foreground hover:bg-secondary/70 transition-colors disabled:opacity-40"
+                  >
+                    {notifPermission === "unsupported"
+                      ? "Notifications not supported"
+                      : notifPermission === "granted"
+                        ? "Notifications allowed"
+                        : "Allow notifications"}
+                  </button>
+                  <label className="font-mono text-[8px] uppercase tracking-wider text-muted-foreground">
+                    Default remind-before (minutes)
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    value={notifPrefs.remindBeforeMin}
+                    onChange={(e) => {
+                      const next = { ...notifPrefs, remindBeforeMin: Number(e.target.value) || 15 }
+                      setNotifPrefs(next)
+                      saveNotificationPrefs(next)
+                    }}
+                    className="w-20 rounded border border-border bg-input px-2 py-1 font-mono text-[10px]"
+                  />
+                </div>
+
+                <AdsPrefsRow />
+
+                <AdSlot
+                  placement="feed"
+                  className="mt-1"
+                  onDismiss={() => setAdsHiddenByUser(true)}
+                />
+
+                <PwaFeaturesPanel
+                  workspaceJson={workspaceJson}
+                  onImportFile={onPwaImportFile}
+                  onSerialCapture={onPwaSerialCapture}
+                  onOfflineSummary={onPwaOfflineSummary}
+                />
+
                 {/* Theme Selector */}
                 <div className="flex flex-col gap-2">
                   <label className="font-mono text-[9px] font-bold uppercase tracking-[0.2em] text-muted-foreground">
@@ -514,17 +604,17 @@ export function ProjectSidebar({
                   <div className="flex items-center gap-2">
                     <button
                       onClick={() => { setThemeChoice('system'); applyTheme(null) }}
-                      className={`px-2 py-1 rounded-md border transition-colors ${themeChoice === 'system' ? 'bg-primary/10 border-primary text-primary' : 'bg-white/5 border-white/10 text-muted-foreground'}`}>
+                      className={`px-2 py-1 rounded-md border transition-colors ${themeChoice === 'system' ? 'bg-primary/10 border-primary text-primary' : 'bg-secondary/50 border-border text-muted-foreground'}`}>
                       System
                     </button>
                     <button
                       onClick={() => { setThemeChoice('light'); applyTheme('light') }}
-                      className={`px-2 py-1 rounded-md border transition-colors ${themeChoice === 'light' ? 'bg-primary/10 border-primary text-primary' : 'bg-white/5 border-white/10 text-muted-foreground'}`}>
+                      className={`px-2 py-1 rounded-md border transition-colors ${themeChoice === 'light' ? 'bg-primary/10 border-primary text-primary' : 'bg-secondary/50 border-border text-muted-foreground'}`}>
                       Light
                     </button>
                     <button
                       onClick={() => { setThemeChoice('dark'); applyTheme('dark') }}
-                      className={`px-2 py-1 rounded-md border transition-colors ${themeChoice === 'dark' ? 'bg-primary/10 border-primary text-primary' : 'bg-white/5 border-white/10 text-muted-foreground'}`}>
+                      className={`px-2 py-1 rounded-md border transition-colors ${themeChoice === 'dark' ? 'bg-primary/10 border-primary text-primary' : 'bg-secondary/50 border-border text-muted-foreground'}`}>
                       Dark
                     </button>
                   </div>
@@ -553,7 +643,7 @@ export function ProjectSidebar({
                           animate={{ opacity: 1, y: 0 }}
                           exit={{ opacity: 0, y: -4 }}
                           transition={{ duration: 0.1 }}
-                          className="absolute top-full left-0 right-0 z-20 mt-1 overflow-hidden rounded-md border border-white/10 bg-[#0d0d10] shadow-xl"
+                          className="absolute top-full left-0 right-0 z-20 mt-1 overflow-hidden rounded-md border border-white/10 bg-popover shadow-xl"
                         >
                           {MODEL_PRESETS.map((preset) => (
                             <button
@@ -628,7 +718,7 @@ export function ProjectSidebar({
                             animate={{ opacity: 1, y: 0 }}
                             exit={{ opacity: 0, y: -4 }}
                             transition={{ duration: 0.1 }}
-                            className="absolute top-full left-0 right-0 z-20 mt-1 overflow-hidden rounded-md border border-white/10 bg-[#0d0d10] shadow-xl"
+                            className="absolute top-full left-0 right-0 z-20 mt-1 overflow-hidden rounded-md border border-white/10 bg-popover shadow-xl"
                           >
                             {models.map(model => (
                               <button
@@ -713,9 +803,6 @@ export function ProjectSidebar({
                       : "No API key — AI disabled"}
                 </div>
 
-                <p className="font-mono text-[8px] text-muted-foreground/45 leading-relaxed">
-                  Attribution: nodepad is adapted from earlier public research-tool experiments.
-                </p>
               </motion.div>
             )}
           </AnimatePresence>

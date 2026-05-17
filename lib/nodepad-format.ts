@@ -30,7 +30,18 @@ export interface NodepadBlock {
   isUnrelated?: boolean
   isGroundTruth?: boolean
   isPinned?: boolean
-  subTasks?: { id: string; text: string; isDone: boolean; timestamp: number }[]
+  dueAt?: number
+  reminderAt?: number
+  timerEndsAt?: number
+  subTasks?: {
+    id: string
+    text: string
+    isDone: boolean
+    timestamp: number
+    dueAt?: number
+    reminderAt?: number
+    timerEndsAt?: number
+  }[]
 }
 
 export interface NodepadGhostNote {
@@ -118,6 +129,9 @@ export function serialiseProject(project: {
         ...(b.isUnrelated  !== undefined && { isUnrelated:  b.isUnrelated }),
         ...(b.isGroundTruth !== undefined && { isGroundTruth: b.isGroundTruth }),
         ...(b.isPinned                   && { isPinned:     b.isPinned }),
+        ...(b.dueAt        !== undefined && { dueAt:        b.dueAt }),
+        ...(b.reminderAt   !== undefined && { reminderAt:   b.reminderAt }),
+        ...(b.timerEndsAt  !== undefined && { timerEndsAt:  b.timerEndsAt }),
         ...(b.subTasks?.length           && { subTasks:     b.subTasks }),
       })),
     },

@@ -1,10 +1,6 @@
 # nodepad
 
-**A design experiment in spatial, AI-augmented thinking.**
-
-[![Watch the intro](https://img.youtube.com/vi/nCLY7rHAjWE/maxresdefault.jpg)](https://www.youtube.com/watch?v=nCLY7rHAjWE)
-
-*[Watch the intro →](https://www.youtube.com/watch?v=nCLY7rHAjWE)*
+**A spatial research tool with AI-augmented notes, knowledge-base linking, and graph views.**
 
 ---
 
@@ -123,10 +119,6 @@ Pull requests welcome. Three PRs have already shaped the project:
 - **PR #1** by [@matwate](https://github.com/matwate) — OpenAI provider support, multi-provider architecture
 - **PR #2** by [@desireco](https://github.com/desireco) — Z.ai provider, robust JSON parsing for truncated responses
 - **PR #23** by [@aayushprsingh](https://github.com/aayushprsingh) — Custom base URL for local/self-hosted models, IPv6 SSRF guard fix
-
----
-
-A design experiment by [Saleh Kayyali](http://mskayyali.com).
 
 ---
 

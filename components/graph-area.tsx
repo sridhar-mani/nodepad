@@ -2,10 +2,13 @@
 
 import * as React from "react"
 import * as d3 from "d3"
+import { BookOpen } from "lucide-react"
 import { CONTENT_TYPE_CONFIG } from "@/lib/content-types"
 import type { TextBlock } from "@/components/tile-card"
 import { GraphDetailPanel } from "./graph-detail-panel"
 import { useModKey } from "@/lib/utils"
+import type { KnowledgeDocument } from "@/lib/knowledge-base"
+import { buildKnowledgeGraphLinks, kbDocNodeId, type KnowledgeGraphLink } from "@/lib/knowledge-graph"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -15,15 +18,20 @@ interface SimNode extends d3.SimulationNodeDatum {
   isSynthesis?: boolean
   synthesisText?: string
   synthesisGenerating?: boolean
+  isKnowledgeDoc?: boolean
+  knowledgeTitle?: string
   degree: number
 }
 
 interface SimLink extends d3.SimulationLinkDatum<SimNode> {
   isSynthesisLink?: boolean
+  isKnowledgeLink?: boolean
+  isInferredKnowledge?: boolean
 }
 
 interface GraphAreaProps {
   blocks: TextBlock[]
+  knowledgeDocuments?: KnowledgeDocument[]
   ghostNote?: { id: string; text: string; category: string; isGenerating: boolean }
   projectName: string
   onReEnrich:       (id: string) => void
@@ -41,6 +49,7 @@ interface GraphAreaProps {
 const R_MIN   = 22   // px — unconnected node
 const R_MAX   = 34   // px — most connected node
 const R_SYNTH = 34
+const R_KB    = 20   // px — knowledge document node
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -48,22 +57,26 @@ const R_SYNTH = 34
 function calcDegrees(
   blocks: TextBlock[],
   ghostNote?: GraphAreaProps["ghostNote"],
+  knowledgeLinks: KnowledgeGraphLink[] = [],
 ): Map<string, number> {
   const deg = new Map<string, number>()
   const ensure = (id: string) => { if (!deg.has(id)) deg.set(id, 0) }
+  const bump = (a: string, b: string) => {
+    ensure(a)
+    ensure(b)
+    deg.set(a, (deg.get(a) ?? 0) + 1)
+    deg.set(b, (deg.get(b) ?? 0) + 1)
+  }
 
   for (const b of blocks) {
     ensure(b.id)
     if (!b.influencedBy?.length) continue
-    for (const tid of b.influencedBy) {
-      ensure(tid)
-      deg.set(b.id, (deg.get(b.id) ?? 0) + 1)
-      deg.set(tid,  (deg.get(tid)  ?? 0) + 1)
-    }
+    for (const tid of b.influencedBy) bump(b.id, tid)
   }
 
+  for (const link of knowledgeLinks) bump(link.blockId, link.kbNodeId)
+
   if (ghostNote) {
-    // Synthesis touches every block
     deg.set(ghostNote.id, blocks.length)
   }
   return deg
@@ -88,6 +101,8 @@ function radialTarget(degree: number, maxDeg: number, outerR: number): number {
 function buildGraph(
   blocks: TextBlock[],
   ghostNote: GraphAreaProps["ghostNote"],
+  knowledgeDocuments: KnowledgeDocument[],
+  knowledgeLinks: KnowledgeGraphLink[],
   cx: number,
   cy: number,
   existing: SimNode[],
@@ -97,6 +112,7 @@ function buildGraph(
 ): { nodes: SimNode[]; links: SimLink[] } {
   const existMap = new Map(existing.map(n => [n.id, n]))
   const blockSet  = new Set(blocks.map(b => b.id))
+  const kbDocIds = new Set(knowledgeDocuments.map(d => kbDocNodeId(d.id)))
   const nodes: SimNode[] = []
   const links: SimLink[] = []
   const edgeSet = new Set<string>()
@@ -156,6 +172,45 @@ function buildGraph(
     }
   }
 
+  // ── Knowledge document nodes (outer ring) ────────────────────────────────
+  const linkedKbIds = new Set(knowledgeLinks.map(l => l.kbNodeId))
+  for (const doc of knowledgeDocuments) {
+    if (!linkedKbIds.has(kbDocNodeId(doc.id))) continue
+    const nodeId = kbDocNodeId(doc.id)
+    const d = deg.get(nodeId) ?? 0
+    const prev = existMap.get(nodeId)
+    if (prev) {
+      prev.isKnowledgeDoc = true
+      prev.knowledgeTitle = doc.title
+      prev.degree = d
+      nodes.push(prev)
+    } else {
+      const r = outerR * 0.92
+      const a = (doc.id.charCodeAt(0) % 360) * (Math.PI / 180)
+      nodes.push({
+        id: nodeId,
+        isKnowledgeDoc: true,
+        knowledgeTitle: doc.title,
+        degree: d,
+        x: cx + r * Math.cos(a),
+        y: cy + r * Math.sin(a),
+      })
+    }
+  }
+
+  for (const link of knowledgeLinks) {
+    if (!blockSet.has(link.blockId) || !kbDocIds.has(link.kbNodeId)) continue
+    const key = `kb:${link.blockId}:${link.kbNodeId}`
+    if (edgeSet.has(key)) continue
+    edgeSet.add(key)
+    links.push({
+      source: link.blockId,
+      target: link.kbNodeId,
+      isKnowledgeLink: true,
+      isInferredKnowledge: link.inferred,
+    })
+  }
+
   return { nodes, links }
 }
 
@@ -175,6 +230,7 @@ function arcPath(sx: number, sy: number, tx: number, ty: number, cx: number, cy:
 
 export function GraphArea({
   blocks,
+  knowledgeDocuments = [],
   ghostNote,
   projectName,
   onReEnrich,
@@ -205,6 +261,11 @@ export function GraphArea({
   const didPan      = React.useRef(false)
   const panStart    = React.useRef({ mx: 0, my: 0, tx: 0, ty: 0 })
   const draggedNode = React.useRef<SimNode | null>(null)
+
+  const knowledgeLinks = React.useMemo(
+    () => buildKnowledgeGraphLinks(blocks, knowledgeDocuments),
+    [blocks, knowledgeDocuments],
+  )
 
   // ── Container size ───────────────────────────────────────────────────────
   React.useEffect(() => {
@@ -248,11 +309,22 @@ export function GraphArea({
     const cy = h / 2
     const outerR = Math.min(w, h) * 0.43
 
-    const deg    = calcDegrees(blocks, ghostNote)
+    const deg    = calcDegrees(blocks, ghostNote, knowledgeLinks)
     const maxDeg = Math.max(...deg.values(), 1)
 
-    const prevBlockCount = nodesRef.current.filter(n => !n.isSynthesis).length
-    const { nodes, links } = buildGraph(blocks, ghostNote, cx, cy, nodesRef.current, deg, maxDeg, outerR)
+    const prevBlockCount = nodesRef.current.filter(n => !n.isSynthesis && !n.isKnowledgeDoc).length
+    const { nodes, links } = buildGraph(
+      blocks,
+      ghostNote,
+      knowledgeDocuments,
+      knowledgeLinks,
+      cx,
+      cy,
+      nodesRef.current,
+      deg,
+      maxDeg,
+      outerR,
+    )
 
     nodesRef.current = nodes
     linksRef.current = links
@@ -278,7 +350,7 @@ export function GraphArea({
 
     const isNew = blocks.length > prevBlockCount
     sim.alpha(isNew ? 0.45 : 0.20).restart()
-  }, [blocks, ghostNote]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [blocks, ghostNote, knowledgeDocuments, knowledgeLinks]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Re-anchor radial centre on resize ────────────────────────────────────
   React.useEffect(() => {
@@ -287,7 +359,7 @@ export function GraphArea({
     const cx = dims.w / 2
     const cy = dims.h / 2
     const outerR = Math.min(dims.w, dims.h) * 0.43
-    const deg    = calcDegrees(blocks, ghostNote)
+    const deg    = calcDegrees(blocks, ghostNote, knowledgeLinks)
     const maxDeg = Math.max(...deg.values(), 1)
     sim.force("radial",
       d3.forceRadial<SimNode>(
@@ -370,9 +442,13 @@ export function GraphArea({
       const b = blocks.find(x => x.id === focalId)
       if (b?.influencedBy) for (const id of b.influencedBy) ids.add(id)
       for (const x of blocks) if (x.influencedBy?.includes(focalId)) ids.add(x.id)
+      for (const link of knowledgeLinks) {
+        if (link.blockId === focalId) ids.add(link.kbNodeId)
+        if (link.kbNodeId === focalId) ids.add(link.blockId)
+      }
     }
     return ids
-  }, [focalId, blocks])
+  }, [focalId, blocks, knowledgeLinks])
 
   const selectedBlock = React.useMemo(
     () => blocks.find(b => b.id === selectedId) ?? null,
@@ -381,9 +457,15 @@ export function GraphArea({
 
   // Derive maxDeg for render (so node sizes are consistent between ticks)
   const maxDeg = React.useMemo(() => {
-    const deg = calcDegrees(blocks, ghostNote)
+    const deg = calcDegrees(blocks, ghostNote, knowledgeLinks)
     return Math.max(...deg.values(), 1)
-  }, [blocks, ghostNote])
+  }, [blocks, ghostNote, knowledgeLinks])
+
+  const selectedKbDoc = React.useMemo(() => {
+    if (!selectedId?.startsWith("kb-doc-")) return null
+    const docId = selectedId.slice("kb-doc-".length)
+    return knowledgeDocuments.find(d => d.id === docId) ?? null
+  }, [selectedId, knowledgeDocuments])
 
   const cx = dims.w / 2
   const cy = dims.h / 2
@@ -391,12 +473,12 @@ export function GraphArea({
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <div className="flex h-full w-full flex-col overflow-hidden bg-background md:flex-row">
+    <div className="flex h-full w-full flex-col overflow-hidden bg-background lg:flex-row">
 
       {/* ── Graph canvas ─────────────────────────────────────────────────── */}
       <div
         ref={containerRef}
-        className={`relative h-full min-h-0 transition-all duration-300 overflow-hidden ${selectedId ? "md:w-[70%]" : "w-full"}`}
+        className={`relative h-full min-h-0 transition-all duration-300 overflow-hidden ${selectedId ? "lg:w-[70%]" : "w-full"}`}
       >
         {blocks.length === 0 && (
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
@@ -486,12 +568,14 @@ export function GraphArea({
                 if (s.x == null || s.y == null || t.x == null || t.y == null) return null
                 const [sx, sy, tx2, ty2] = [s.x, s.y, t.x, t.y]
 
-                const isSynth = (link as SimLink).isSynthesisLink
+                const simLink = link as SimLink
+                const isSynth = simLink.isSynthesisLink
+                const isKb = simLink.isKnowledgeLink
                 const dimmed = focalId != null &&
                   s.id !== focalId && t.id !== focalId
-                const highlighted = focalId != null && !dimmed && !isSynth
+                const highlighted = focalId != null && !dimmed && !isSynth && !isKb
 
-                const d = isSynth
+                const d = isSynth || isKb
                   ? `M ${sx} ${sy} L ${tx2} ${ty2}`
                   : arcPath(sx, sy, tx2, ty2, cx, cy)
 
@@ -499,13 +583,14 @@ export function GraphArea({
                   <path
                     key={i}
                     d={d}
-                    stroke="white"
-                    strokeWidth={isSynth ? 0.5 : highlighted ? 2 : 1.2}
-                    strokeDasharray={isSynth ? "3 7" : undefined}
+                    stroke={isKb ? "var(--type-reference)" : "white"}
+                    strokeWidth={isSynth ? 0.5 : isKb ? 1 : highlighted ? 2 : 1.2}
+                    strokeDasharray={isSynth ? "3 7" : isKb && simLink.isInferredKnowledge ? "2 5" : isKb ? "4 4" : undefined}
                     strokeOpacity={
                       dimmed      ? 0.02 :
                       highlighted ? 0.75 :
                       isSynth     ? 0.05 :
+                      isKb        ? 0.35 :
                       0.22
                     }
                     fill="none"
@@ -526,17 +611,23 @@ export function GraphArea({
                   node.id !== focalId &&
                   (!connectedToFocal || !connectedToFocal.has(node.id))
                 const isEnriching = node.block?.isEnriching
-                const isHub       = node.degree >= 3 && !node.isSynthesis
+                const isHub       = node.degree >= 3 && !node.isSynthesis && !node.isKnowledgeDoc
+                const isKbDoc     = node.isKnowledgeDoc
 
-                const r      = node.isSynthesis ? R_SYNTH : calcR(node.degree, maxDeg)
+                const r      = node.isSynthesis ? R_SYNTH : isKbDoc ? R_KB : calcR(node.degree, maxDeg)
                 const config = node.block ? CONTENT_TYPE_CONFIG[node.block.contentType] : null
-                const Icon   = config?.icon ?? null
-                const accent = config?.accentVar ?? "var(--type-thesis)"
+                const Icon   = isKbDoc ? BookOpen : (config?.icon ?? null)
+                const accent = isKbDoc ? "var(--type-reference)" : (config?.accentVar ?? "var(--type-thesis)")
 
-                const fill = node.isSynthesis ? "url(#synth-grad)" : (config?.accentVar ?? "white")
+                const fill = node.isSynthesis
+                  ? "url(#synth-grad)"
+                  : isKbDoc
+                    ? "var(--type-reference)"
+                    : (config?.accentVar ?? "white")
 
-                // Short label: first 4 words, truncated at 22 chars
-                const labelWords = (node.block?.text ?? "").split(/\s+/).slice(0, 4).join(" ")
+                const labelWords = isKbDoc
+                  ? (node.knowledgeTitle ?? "Document").split(/\s+/).slice(0, 4).join(" ")
+                  : (node.block?.text ?? "").split(/\s+/).slice(0, 4).join(" ")
                 const label = labelWords.length > 22 ? labelWords.slice(0, 22) + "…" : labelWords
 
                 return (
@@ -691,9 +782,11 @@ export function GraphArea({
           if (!node) return null
           const text = node.isSynthesis
             ? (node.synthesisText ?? "Synthesis")
-            : (node.block?.text ?? "")
+            : node.isKnowledgeDoc
+              ? (node.knowledgeTitle ?? "Knowledge document")
+              : (node.block?.text ?? "")
           const config = node.block ? CONTENT_TYPE_CONFIG[node.block.contentType] : null
-          const accent = config?.accentVar ?? "var(--type-thesis)"
+          const accent = node.isKnowledgeDoc ? "var(--type-reference)" : (config?.accentVar ?? "var(--type-thesis)")
           const tipX = Math.min(tooltip.x + 14, (selectedId ? dims.w * 0.7 : dims.w) - 300)
           const tipY = tooltip.y - 16
           return (
@@ -711,7 +804,7 @@ export function GraphArea({
                     style: { color: "black", opacity: 0.7 },
                   })}
                   <span className="font-mono text-[9px] font-black uppercase tracking-widest text-black/70">
-                    {node.isSynthesis ? "Synthesis" : config?.label}
+                    {node.isSynthesis ? "Synthesis" : node.isKnowledgeDoc ? "Knowledge" : config?.label}
                   </span>
                   {node.block?.category && (
                     <span className="ml-auto font-mono text-[8px] text-black/50 truncate max-w-[90px]">
@@ -741,20 +834,24 @@ export function GraphArea({
           <div className="absolute bottom-4 right-4 pointer-events-none flex flex-col items-end gap-1">
             <span className="font-mono text-[7.5px] text-muted-foreground/20 uppercase tracking-widest">centre = most connected</span>
             <span className="font-mono text-[7.5px] text-muted-foreground/20 uppercase tracking-widest">edge = isolated</span>
+            {knowledgeDocuments.length > 0 && (
+              <span className="font-mono text-[7.5px] text-muted-foreground/20 uppercase tracking-widest">dashed = inferred KB link</span>
+            )}
           </div>
         )}
 
         {/* ── Hints ─────────────────────────────────────────────────────── */}
-        <div className="absolute bottom-4 left-4 pointer-events-none">
-          <span className="font-mono text-[8px] text-muted-foreground/22 uppercase tracking-widest">
-            scroll to zoom · drag to pan · drag node to reposition
+        <div className="absolute bottom-4 left-4 pointer-events-none max-w-[70%]">
+          <span className="font-mono text-[8px] text-muted-foreground/22 uppercase tracking-widest leading-relaxed">
+            <span className="hidden sm:inline">scroll to zoom · </span>drag to pan · tap node for details
           </span>
         </div>
 
         {blocks.length > 0 && (
           <div className="absolute top-4 left-4 pointer-events-none">
             <span className="font-mono text-[8px] text-muted-foreground/22 uppercase tracking-widest">
-              {blocks.length} node{blocks.length !== 1 ? "s" : ""}
+              {blocks.length} note{blocks.length !== 1 ? "s" : ""}
+              {knowledgeLinks.length > 0 ? ` · ${knowledgeLinks.length} KB link${knowledgeLinks.length !== 1 ? "s" : ""}` : ""}
               {ghostNote ? " · synthesis active" : ""}
             </span>
           </div>
@@ -763,20 +860,50 @@ export function GraphArea({
       </div>
 
       {/* ── Detail panel (30%) ─────────────────────────────────────────────── */}
-      {selectedId && (
-        <div className="h-[42vh] overflow-hidden transition-all duration-300 md:h-full md:w-[30%]">
-          <GraphDetailPanel
-            block={selectedBlock}
-            allBlocks={blocks}
-            onClose={() => setSelectedId(null)}
-            onSelectNode={id => setSelectedId(id)}
-            onReEnrich={onReEnrich}
-            onChangeType={onChangeType}
-            onTogglePin={onTogglePin}
-            onToggleGroundTruth={onToggleGroundTruth}
-            onEdit={onEdit}
-            onEditAnnotation={onEditAnnotation}
-          />
+      {selectedId && (selectedBlock || selectedKbDoc) && (
+        <div className="h-[min(48vh,420px)] overflow-hidden transition-all duration-300 lg:h-full lg:w-[30%]">
+          {selectedBlock ? (
+            <GraphDetailPanel
+              block={selectedBlock}
+              allBlocks={blocks}
+              onClose={() => setSelectedId(null)}
+              onSelectNode={id => setSelectedId(id)}
+              onReEnrich={onReEnrich}
+              onChangeType={onChangeType}
+              onTogglePin={onTogglePin}
+              onToggleGroundTruth={onToggleGroundTruth}
+              onEdit={onEdit}
+              onEditAnnotation={onEditAnnotation}
+            />
+          ) : selectedKbDoc ? (
+            <div className="flex h-full flex-col bg-card/95">
+              <div className="flex items-center justify-between border-b border-border px-4 py-3">
+                <div className="flex items-center gap-2">
+                  <BookOpen className="h-4 w-4 text-[var(--type-reference)]" />
+                  <span className="font-mono text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+                    Knowledge document
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setSelectedId(null)}
+                  className="font-mono text-[9px] text-muted-foreground hover:text-foreground"
+                >
+                  Close
+                </button>
+              </div>
+              <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
+                <h2 className="text-sm font-semibold text-foreground">{selectedKbDoc.title}</h2>
+                <p className="font-mono text-[9px] text-muted-foreground">
+                  {selectedKbDoc.chunks.length} chunk{selectedKbDoc.chunks.length !== 1 ? "s" : ""} · {selectedKbDoc.fileName}
+                </p>
+                <p className="text-xs text-muted-foreground leading-relaxed whitespace-pre-wrap">
+                  {selectedKbDoc.rawText.slice(0, 1200)}
+                  {selectedKbDoc.rawText.length > 1200 ? "…" : ""}
+                </p>
+              </div>
+            </div>
+          ) : null}
         </div>
       )}
     </div>

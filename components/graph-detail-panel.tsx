@@ -4,6 +4,7 @@ import * as React from "react"
 import { createPortal } from "react-dom"
 import { CONTENT_TYPE_CONFIG, type ContentType } from "@/lib/content-types"
 import type { TextBlock } from "@/components/tile-card"
+import { normalizeConfidencePercent } from "@/lib/confidence"
 import { Link as LinkIcon, Pin, RefreshCw, ShieldCheck, Tag, X } from "lucide-react"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
@@ -275,17 +276,21 @@ export function GraphDetailPanel({
         </div>
 
         {/* Confidence bar */}
-        {block.confidence != null && (
+        {(() => {
+          const conf = normalizeConfidencePercent(block.confidence)
+          if (conf == null) return null
+          return (
           <div className="px-4 pb-3 space-y-1">
             <div className="flex items-center justify-between">
               <span className="font-mono text-[8px] uppercase tracking-widest text-muted-foreground/50">Confidence</span>
-              <span className="font-mono text-[10px] font-bold" style={{ color: accent }}>{block.confidence}%</span>
+              <span className="font-mono text-[10px] font-bold" style={{ color: accent }}>{conf}%</span>
             </div>
             <div className="h-1 w-full rounded-full bg-secondary overflow-hidden">
-              <div className="h-full rounded-full transition-all duration-500" style={{ width: `${block.confidence}%`, background: accent }} />
+              <div className="h-full rounded-full transition-all duration-500" style={{ width: `${conf}%`, background: accent }} />
             </div>
           </div>
-        )}
+          )
+        })()}
 
         {/* Separator */}
         {block.annotation && <div className="mx-4 h-px bg-border/40 mb-3" />}

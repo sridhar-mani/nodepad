@@ -1,4 +1,5 @@
 import { createIndexedDBClient, hasIndexedDB } from "@/lib/indexeddb"
+import { writeWorkspaceToOpfs } from "@/lib/pwa/opfs"
 
 export interface WorkspaceSnapshot<TProject = unknown> {
   projects: TProject[]
@@ -41,6 +42,8 @@ export async function saveWorkspaceToIndexedDB<TProject = unknown>(
     projects,
     activeProjectId,
   })
+
+  void writeWorkspaceToOpfs({ projects, activeProjectId, ts: Date.now() })
 }
 
 export async function saveWorkspaceBackupToIndexedDB<TProject = unknown>(projects: TProject[]): Promise<void> {

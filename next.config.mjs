@@ -45,16 +45,16 @@ const nextConfig = {
             key: "Content-Security-Policy",
             value: [
               "default-src 'self'",
-              "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cloud.umami.is",
+              "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cloud.umami.is https://pagead2.googlesyndication.com https://www.googletagmanager.com https://www.google.com https://adservice.google.com https://cdn.propellerads.com",
               "style-src 'self' 'unsafe-inline'",
               // Allow all HTTPS so user-configured custom base URLs (arbitrary
               // OpenAI-compatible endpoints) are not blocked by CSP. Enumerating
               // specific provider domains is incompatible with a custom-URL feature.
               // http://localhost:* covers local providers (Ollama, LM Studio, vLLM).
               "connect-src 'self' https: http://localhost:*",
-              "img-src 'self' data: blob: https://i.ytimg.com",
+              "img-src 'self' data: blob: https://i.ytimg.com https://*.googlesyndication.com https://*.google.com https://*.doubleclick.net https://*.gstatic.com",
               "font-src 'self' data:",
-              "frame-src https://www.youtube-nocookie.com https://www.youtube.com",
+              "frame-src https://www.youtube-nocookie.com https://www.youtube.com https://googleads.g.doubleclick.net https://tpc.googlesyndication.com https://www.google.com",
               "frame-ancestors 'none'",
             ].join("; "),
           },
