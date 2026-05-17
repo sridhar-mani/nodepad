@@ -305,11 +305,13 @@ export function TilingArea({
 
       {/* Empty state — absolutely positioned so it centers identically across all views */}
       {pageTrees.length === 0 && !taskBlock && (
-        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-          <div className="flex flex-col items-center gap-8 w-[420px]">
-            <p className="font-mono text-[10px] uppercase tracking-[0.35em] text-foreground/35">spatial research workspace</p>
+        <div className="absolute inset-0 flex items-center justify-center overflow-y-auto pointer-events-none p-4 pb-32 sm:pb-24">
+          <div className="flex flex-col items-center gap-4 sm:gap-8 w-full max-w-md pointer-events-auto">
+            <p className="font-mono text-[10px] uppercase tracking-[0.25em] sm:tracking-[0.35em] text-foreground/35 text-center">
+              spatial research workspace
+            </p>
 
-            <div className="flex flex-col gap-5 w-full">
+            <div className="flex flex-col gap-3 sm:gap-5 w-full">
               {([
                 { color: "var(--type-question)", label: "question", text: "Does consciousness require a period of genuine solitude?" },
                 { color: "var(--type-claim)",    label: "claim",    text: "Caffeine improves short-term recall by ~15%" },
@@ -327,12 +329,12 @@ export function TilingArea({
             </div>
 
 
-            <div className="w-full max-w-sm pointer-events-auto">
+            <div className="w-full max-w-sm pointer-events-auto hidden sm:block">
               <AdSlot placement="empty" />
             </div>
 
-            <p className="text-[13px] text-foreground/65 uppercase tracking-[0.15em] whitespace-nowrap">
-              {`type anything · #type to classify · ${mod}K for commands`}
+            <p className="text-[11px] sm:text-[13px] text-center text-foreground/65 uppercase tracking-wide text-balance max-w-[280px] sm:max-w-none leading-relaxed px-1">
+              Type to capture · <span className="text-primary/80">#type</span> to classify · {mod}K commands
             </p>
           </div>
         </div>

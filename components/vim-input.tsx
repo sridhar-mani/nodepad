@@ -503,22 +503,22 @@ export function VimInput({ onSubmit, onSubmitReferenceImage, onSubmitKnowledgeFi
               title="Add image as reference"
             >
               <ImagePlus className="h-3.5 w-3.5" />
-              Image
+              <span className="hidden sm:inline">Image</span>
             </button>
 
             <button
               onClick={() => knowledgeInputRef.current?.click()}
-              className="entry-bar-chip flex items-center gap-1.5 rounded px-2 py-1 font-mono text-[9px]"
+              className="entry-bar-chip touch-target flex items-center gap-1.5 rounded px-2 py-1 font-mono text-[9px]"
               title="Upload knowledge files"
             >
               <FileText className="h-3.5 w-3.5" />
-              Knowledge
+              <span className="hidden sm:inline">Knowledge</span>
             </button>
 
             {speechSupported && (
               <button
                 onClick={toggleDictation}
-                className={`flex items-center gap-1.5 rounded border px-2 py-1 font-mono text-[9px] transition-colors ${
+                className={`touch-target flex items-center gap-1.5 rounded border px-2 py-1 font-mono text-[9px] transition-colors ${
                   isListening
                     ? "border-primary/40 bg-primary/15 text-primary"
                     : "entry-bar-chip"
@@ -526,7 +526,7 @@ export function VimInput({ onSubmit, onSubmitReferenceImage, onSubmitKnowledgeFi
                 title={isListening ? "Stop dictation" : "Start dictation"}
               >
                 {isListening ? <MicOff className="h-3.5 w-3.5" /> : <Mic className="h-3.5 w-3.5" />}
-                {isListening ? "Listening" : "Dictate"}
+                <span className="hidden sm:inline">{isListening ? "Listening" : "Dictate"}</span>
               </button>
             )}
 

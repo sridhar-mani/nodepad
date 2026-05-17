@@ -23,7 +23,7 @@ export function ViewModeBar({ value, onChange, className }: ViewModeBarProps) {
     <nav
       aria-label="Workspace view"
       className={cn(
-        "shrink-0 border-t border-border bg-card/90 backdrop-blur-md px-2 pt-1.5 pb-[max(0.375rem,env(safe-area-inset-bottom))] lg:hidden",
+        "shrink-0 border-t border-border bg-card/95 backdrop-blur-md px-2 pt-1 pb-[max(0.25rem,env(safe-area-inset-bottom))] lg:hidden",
         className,
       )}
     >

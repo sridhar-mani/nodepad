@@ -38,6 +38,7 @@ import { ReminderEngine } from "@/components/reminder-engine"
 import { AdsRuntime } from "@/components/ads-runtime"
 import { PanelBackdrop } from "@/components/panel-backdrop"
 import { ViewModeBar } from "@/components/view-mode-bar"
+import { AiKeyBanner } from "@/components/ai-key-banner"
 import { useViewport } from "@/lib/use-viewport"
 import {
   buildKnowledgeDocumentsFromFilesInWorker,
@@ -1280,27 +1281,14 @@ export default function Page() {
         />
 
         {isHydrated && !aiReady && (
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-center gap-2 sm:gap-3 px-3 sm:px-4 py-2 bg-amber-950/80 border-b border-amber-800/60 text-amber-200 text-xs shrink-0">
-            <span className="opacity-80 leading-relaxed">⚡ AI enrichment requires a <strong className="text-amber-200">{providerPreset.label} API key</strong>. Open <strong className="text-amber-200">☰ → Settings</strong>.</span>
-            <div className="flex items-center gap-2 shrink-0 flex-wrap">
-              <button
-                onClick={() => { setIsSidebarOpen(true); setJumpToSettings(true) }}
-                className="px-2.5 py-1 rounded bg-amber-700/60 hover:bg-amber-600/70 text-amber-100 font-medium transition-colors cursor-pointer border border-amber-600/50"
-              >
-                Add API key →
-              </button>
-              {providerPreset.keyUrl && (
-                <a
-                  href={providerPreset.keyUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="opacity-60 hover:opacity-90 transition-opacity underline underline-offset-2"
-                >
-                  Get key ↗
-                </a>
-              )}
-            </div>
-          </div>
+          <AiKeyBanner
+            providerLabel={providerPreset.label}
+            keyUrl={providerPreset.keyUrl}
+            onOpenSettings={() => {
+              setIsSidebarOpen(true)
+              setJumpToSettings(true)
+            }}
+          />
         )}
 
         <div className="flex flex-1 overflow-hidden relative min-h-0">

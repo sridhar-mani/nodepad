@@ -482,7 +482,7 @@ export function GraphArea({
       >
         {blocks.length === 0 && (
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-            <div className="flex flex-col items-center gap-8 w-[420px]">
+            <div className="flex flex-col items-center gap-6 sm:gap-8 w-full max-w-md px-4">
               <p className="font-mono text-[10px] uppercase tracking-[0.35em] text-foreground/35">force-directed graph view</p>
 
               <div className="flex flex-col gap-5 w-full">
@@ -502,8 +502,8 @@ export function GraphArea({
                 ))}
               </div>
 
-              <p className="text-[13px] text-foreground/65 uppercase tracking-[0.15em] whitespace-nowrap">
-                {`type anything · #type to classify · ${mod}K for commands`}
+              <p className="text-[11px] sm:text-[13px] text-center text-foreground/65 uppercase tracking-wide text-balance max-w-[280px] leading-relaxed px-2">
+                Type to capture · #type to classify · {mod}K commands
               </p>
             </div>
           </div>

@@ -16,6 +16,7 @@ export function PWAHooks() {
       event.preventDefault()
       const installEvent = event as BeforeInstallPromptEvent
       ;(window as Window & { __nodepadInstallPrompt?: BeforeInstallPromptEvent }).__nodepadInstallPrompt = installEvent
+      window.dispatchEvent(new Event("nodepad-install-ready"))
     }
 
     const onAppInstalled = () => {

@@ -29,6 +29,7 @@ import {
 } from "@/lib/notifications"
 import { AdsPrefsRow } from "@/components/ads-prefs-sync"
 import { AdSlot } from "@/components/ad-slot"
+import { PwaInstallButton } from "@/components/pwa-install-button"
 import { setAdsHiddenByUser } from "@/lib/ads-config"
 import { PwaFeaturesPanel } from "@/components/pwa-features-panel"
 import {
@@ -531,7 +532,14 @@ export function ProjectSidebar({
                 {/* Notifications (PWA) */}
                 <div className="flex flex-col gap-2">
                   <label className="font-mono text-[9px] font-bold uppercase tracking-[0.2em] text-muted-foreground">
-                    Reminders &amp; PWA
+                    Install &amp; PWA
+                  </label>
+                  <PwaInstallButton variant="pill" className="w-full justify-center" />
+                </div>
+
+                <div className="flex flex-col gap-2">
+                  <label className="font-mono text-[9px] font-bold uppercase tracking-[0.2em] text-muted-foreground">
+                    Reminders
                   </label>
                   <p className="font-mono text-[9px] text-muted-foreground leading-relaxed">
                     Enable browser notifications for deadlines, reminders, and focus timers. Works when the app is installed or open.

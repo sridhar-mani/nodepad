@@ -31,6 +31,12 @@
       "sizes": "1366x768",
       "type": "image/jpeg",
       "form_factor": "wide"
+    },
+    {
+      "src": "/nodepad.jpg",
+      "sizes": "512x512",
+      "type": "image/jpeg",
+      "form_factor": "narrow"
     }
   ],
   "shortcuts": [

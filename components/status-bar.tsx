@@ -7,6 +7,7 @@ import type { TextBlock } from "@/components/tile-card"
 import { AboutPanel } from "@/components/about-panel"
 
 import { Menu, LayoutList, Sparkles } from "lucide-react"
+import { PwaInstallButton } from "@/components/pwa-install-button"
 
 interface StatusBarProps {
   blockCount: number
@@ -75,7 +76,7 @@ export function StatusBar({
   }, [blocks])
 
   return (
-    <header className="flex min-h-10 flex-wrap items-center justify-between gap-2 border-b border-border bg-card/80 px-3 py-2 backdrop-blur-md z-50 md:h-10 md:flex-nowrap md:py-1.5">
+    <header className="flex min-h-10 flex-wrap items-center justify-between gap-1.5 sm:gap-2 border-b border-border bg-card/80 px-2 sm:px-3 py-1.5 sm:py-2 backdrop-blur-md z-50 lg:h-10 lg:flex-nowrap lg:py-1.5">
       <div className="flex min-w-0 items-center gap-1.5">
         <button 
           onClick={onMenuClick}
@@ -160,14 +161,14 @@ export function StatusBar({
             )}
           </div>
         )}
-        <div className="flex items-center gap-2 border-l border-white/5 pl-0 ml-0 sm:pl-4 sm:ml-4">
-          {/* Model indicator */}
+        <div className="flex items-center gap-1.5 sm:gap-2 border-l border-border/40 pl-1.5 sm:pl-4 ml-0.5 sm:ml-4">
+          <PwaInstallButton />
           {modelLabel && (
-            <span className="hidden font-mono text-[9px] text-muted-foreground/60 uppercase tracking-wider px-1.5 sm:inline-flex">
+            <span className="hidden font-mono text-[9px] text-muted-foreground/60 uppercase tracking-wider px-1.5 lg:inline-flex">
               {modelLabel}
             </span>
           )}
-          <span className="font-mono text-[10px] text-muted-foreground tabular-nums" suppressHydrationWarning>
+          <span className="hidden lg:inline font-mono text-[10px] text-muted-foreground tabular-nums" suppressHydrationWarning>
             {time}
           </span>
           {/* Ghost panel toggle with badge */}
