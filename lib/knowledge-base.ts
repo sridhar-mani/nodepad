@@ -84,28 +84,42 @@ function lexicalScore(query: string, text: string): number {
   return ratio * 0.85 + density * 0.15
 }
 
-export async function buildKnowledgeDocumentFromFile(file: File): Promise<KnowledgeDocument> {
-  const text = await file.text()
-  const rawText = cleanText(text)
+export function buildKnowledgeDocumentFromRaw(opts: {
+  fileName: string
+  mimeType: string
+  rawText: string
+  title?: string
+}): KnowledgeDocument {
+  const rawText = cleanText(opts.rawText)
   const docId = makeId("kbdoc")
+  const title = opts.title ?? opts.fileName
 
   const chunks = splitIntoChunks(rawText).map((chunkText, idx) => ({
     id: `${docId}-chunk-${idx + 1}`,
     docId,
-    docTitle: file.name,
+    docTitle: title,
     text: chunkText,
   }))
 
   return {
     id: docId,
-    title: file.name,
-    fileName: file.name,
-    mimeType: file.type || "text/plain",
+    title,
+    fileName: opts.fileName,
+    mimeType: opts.mimeType,
     createdAt: Date.now(),
     updatedAt: Date.now(),
     rawText,
     chunks,
   }
+}
+
+export async function buildKnowledgeDocumentFromFile(file: File): Promise<KnowledgeDocument> {
+  const text = await file.text()
+  return buildKnowledgeDocumentFromRaw({
+    fileName: file.name,
+    mimeType: file.type || "text/plain",
+    rawText: text,
+  })
 }
 
 export function findKnowledgeMatches(
@@ -157,6 +171,23 @@ export function isLikelyTextFile(file: File): boolean {
     name.endsWith(".yaml") ||
     name.endsWith(".yml")
   )
+}
+
+/** Text, PDF, or spreadsheet — anything the research ingest pipeline accepts. */
+export function isLikelyImportableFile(file: File): boolean {
+  if (isLikelyTextFile(file)) return true
+  const name = file.name.toLowerCase()
+  const type = file.type.toLowerCase()
+  if (type === "application/pdf" || name.endsWith(".pdf")) return true
+  if (
+    type.includes("spreadsheet") ||
+    type.includes("excel") ||
+    name.endsWith(".xlsx") ||
+    name.endsWith(".xls")
+  ) {
+    return true
+  }
+  return false
 }
 
 export function toKnowledgeSource(match: KnowledgeMatch): { url: string; title: string; siteName: string } {

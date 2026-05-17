@@ -39,10 +39,18 @@ export function useViewport(): ViewportState {
   )
 
   useEffect(() => {
+    let raf = 0
     const update = () => setState(stateFromWidth(window.innerWidth))
     update()
-    window.addEventListener("resize", update, { passive: true })
-    return () => window.removeEventListener("resize", update)
+    const onResize = () => {
+      cancelAnimationFrame(raf)
+      raf = requestAnimationFrame(update)
+    }
+    window.addEventListener("resize", onResize, { passive: true })
+    return () => {
+      cancelAnimationFrame(raf)
+      window.removeEventListener("resize", onResize)
+    }
   }, [])
 
   return state

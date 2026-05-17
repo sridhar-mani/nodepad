@@ -97,6 +97,7 @@ export function VimInput({ onSubmit, onSubmitReferenceImage, onSubmitKnowledgeFi
     { id: "new-project",    icon: FolderPlus, label: "New Project", sub: "" },
     { id: "open-index",     icon: BookOpen,   label: "Index",       sub: "" },
     { id: "open-synthesis", icon: Sparkles,   label: "Synthesis",   sub: "" },
+    { id: "open-research",  icon: BookOpen,   label: "Research",    sub: "toolkit" },
   ], [])
 
   // ── Filtered items ──────────────────────────────────────────────────────
@@ -188,6 +189,30 @@ export function VimInput({ onSubmit, onSubmitReferenceImage, onSubmitKnowledgeFi
     setSearch("")
     close()
   }, [onCommand, value, close])
+
+  const submitValue = React.useCallback((raw: string) => {
+    const trimmed = raw.trim()
+    if (!trimmed) return
+    if (trimmed.startsWith(":")) {
+      const body = trimmed.slice(1).trim()
+      const [head, ...rest] = body.split(/\s+/)
+      const cmd = head.toLowerCase()
+      const arg = rest.join(" ").trim()
+      if (cmd === "research") {
+        onCommand("open-research")
+        return
+      }
+      if (cmd === "finance" && arg) {
+        onCommand("finance", arg)
+        return
+      }
+      if (cmd === "cite" && arg) {
+        onCommand("cite", arg)
+        return
+      }
+    }
+    onSubmit(trimmed)
+  }, [onCommand, onSubmit])
 
   const toggleDictation = React.useCallback(() => {
     const recognition = recognitionRef.current
@@ -315,7 +340,7 @@ export function VimInput({ onSubmit, onSubmitReferenceImage, onSubmitKnowledgeFi
         className="w-full"
         onKeyDown={(e) => {
           if (e.key === "Enter" && value.trim() && !isCommandKOpen) {
-            onSubmit(value.trim())
+            submitValue(value)
             setValue("")
           }
           if (e.key === "Escape") setIsCommandKOpen(false)
@@ -474,7 +499,7 @@ export function VimInput({ onSubmit, onSubmitReferenceImage, onSubmitKnowledgeFi
         <input
           ref={knowledgeInputRef}
           type="file"
-          accept=".txt,.md,.markdown,.csv,.json,.yaml,.yml,text/plain,text/markdown,text/csv,application/json"
+          accept=".txt,.md,.markdown,.csv,.json,.yaml,.yml,.pdf,.xlsx,.xls,text/plain,text/markdown,text/csv,application/json,application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
           multiple
           className="hidden"
           onChange={handleKnowledgePick}
@@ -553,7 +578,7 @@ export function VimInput({ onSubmit, onSubmitReferenceImage, onSubmitKnowledgeFi
             <button
               onClick={() => {
                 if (value.trim()) {
-                  onSubmit(value.trim())
+                  submitValue(value)
                   setValue("")
                   setIsCommandKOpen(false)
                 }

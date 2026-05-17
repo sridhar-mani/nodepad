@@ -6,8 +6,7 @@ import { CONTENT_TYPE_CONFIG, type ContentType } from "@/lib/content-types"
 import type { TextBlock } from "@/components/tile-card"
 import { normalizeConfidencePercent } from "@/lib/confidence"
 import { Link as LinkIcon, Pin, RefreshCw, ShieldCheck, Tag, X } from "lucide-react"
-import ReactMarkdown from "react-markdown"
-import remarkGfm from "remark-gfm"
+import { MarkdownWithMath } from "@/components/markdown-with-math"
 
 const AnnotationMarkdownComponents = {
   a: ({ href, children }: { href?: string; children?: React.ReactNode }) => (
@@ -318,12 +317,9 @@ export function GraphDetailPanel({
                 onDoubleClick={() => { setDraftAnnotation(block.annotation ?? ""); setEditingAnnotation(true) }}
                 title="Double-click to edit"
               >
-                <ReactMarkdown
-                  remarkPlugins={[remarkGfm]}
-                  components={AnnotationMarkdownComponents as any}
-                >
+                <MarkdownWithMath components={AnnotationMarkdownComponents as any}>
                   {block.annotation ?? ""}
-                </ReactMarkdown>
+                </MarkdownWithMath>
               </div>
             )}
           </div>

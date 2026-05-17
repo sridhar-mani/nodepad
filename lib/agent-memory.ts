@@ -178,6 +178,7 @@ export async function retrieveRelevantMemories(
   projectId: string,
   query: string,
   limit = 6,
+  opts?: { skipLora?: boolean },
 ): Promise<AgentMemoryRecord[]> {
   const db = await readDB()
   const indexed = db.memories
@@ -187,7 +188,7 @@ export async function retrieveRelevantMemories(
     .sort((a, b) => b.score - a.score || b.memory.timestamp - a.memory.timestamp)
     .map((entry) => entry.memory)
 
-  const lora = await getLoraDb()
+  const lora = opts?.skipLora ? null : await getLoraDb()
   let loraMemories: AgentMemoryRecord[] = []
   if (lora) {
     try {

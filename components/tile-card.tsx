@@ -6,8 +6,7 @@ import { X, Check, Pin, RefreshCw, ChevronDown, ChevronRight, ChevronLeft, Link 
 import { SchedulePopover } from "@/components/schedule-popover"
 import { formatDueLabel, formatTimerRemaining, type SchedulePatch } from "@/lib/scheduling"
 import { motion } from "framer-motion"
-import ReactMarkdown from "react-markdown"
-import remarkGfm from "remark-gfm"
+import { MarkdownWithMath } from "@/components/markdown-with-math"
 import { CONTENT_TYPE_CONFIG, type ContentType } from "@/lib/content-types"
 import { normalizeConfidencePercent } from "@/lib/confidence"
 
@@ -672,12 +671,11 @@ export const TileCard = memo(function TileCard({
                     ) : (
                         <div className="flex flex-col gap-2">
                           <div className={`prose-sm prose-invert max-w-none text-[13px] leading-relaxed text-foreground/80 ${block.isEnriching ? "shimmer-body" : ""} ${isAnnotationRTL ? 'rtl-text' : ''}`}>
-                            <ReactMarkdown 
-                              remarkPlugins={[remarkGfm]}
+                            <MarkdownWithMath
                               components={MarkdownComponents as any}
                             >
                               {block.annotation || ""}
-                            </ReactMarkdown>
+                            </MarkdownWithMath>
                           </div>
                         </div>
                     )}

@@ -4,14 +4,18 @@ import { useEffect } from "react"
 import type { TextBlock } from "@/components/tile-card"
 import { collectDueReminders } from "@/lib/scheduling"
 import { fireDueReminder, getNotificationSupport, loadNotificationPrefs } from "@/lib/notifications"
+import { usePerformanceProfile } from "@/lib/use-performance-profile"
 
 interface ReminderEngineProps {
   projects: Array<{ id: string; name: string; blocks: TextBlock[] }>
 }
 
 export function ReminderEngine({ projects }: ReminderEngineProps) {
+  const perf = usePerformanceProfile()
+
   useEffect(() => {
     const tick = () => {
+      if (document.hidden) return
       const prefs = loadNotificationPrefs()
       if (!prefs.enabled || getNotificationSupport() !== "granted") return
       const due = collectDueReminders(projects)
@@ -21,7 +25,7 @@ export function ReminderEngine({ projects }: ReminderEngineProps) {
     }
 
     tick()
-    const id = window.setInterval(tick, 30_000)
+    const id = window.setInterval(tick, perf.reminderIntervalMs)
     const onVis = () => {
       if (document.visibilityState === "visible") tick()
     }
@@ -30,7 +34,7 @@ export function ReminderEngine({ projects }: ReminderEngineProps) {
       clearInterval(id)
       document.removeEventListener("visibilitychange", onVis)
     }
-  }, [projects])
+  }, [projects, perf.reminderIntervalMs])
 
   return null
 }

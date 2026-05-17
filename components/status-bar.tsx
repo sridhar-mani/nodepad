@@ -6,7 +6,7 @@ import { CONTENT_TYPE_CONFIG } from "@/lib/content-types"
 import type { TextBlock } from "@/components/tile-card"
 import { AboutPanel } from "@/components/about-panel"
 
-import { Menu, LayoutList, Sparkles } from "lucide-react"
+import { Menu, LayoutList, Sparkles, FlaskConical } from "lucide-react"
 import { PwaInstallButton } from "@/components/pwa-install-button"
 
 interface StatusBarProps {
@@ -16,10 +16,12 @@ interface StatusBarProps {
   isSidebarOpen: boolean
   isIndexOpen: boolean
   isGhostPanelOpen: boolean
+  isResearchPanelOpen?: boolean
   ghostNoteCount: number
   onMenuClick: () => void
   onIndexToggle: () => void
   onGhostPanelToggle: () => void
+  onResearchPanelToggle?: () => void
   modelLabel?: string
   showHelpTooltip?: boolean
   onHelpTooltipDismiss?: () => void
@@ -33,10 +35,12 @@ export function StatusBar({
   isSidebarOpen,
   isIndexOpen,
   isGhostPanelOpen,
+  isResearchPanelOpen,
   ghostNoteCount,
   onMenuClick,
   onIndexToggle,
   onGhostPanelToggle,
+  onResearchPanelToggle,
   modelLabel,
   showHelpTooltip,
   onHelpTooltipDismiss,
@@ -172,6 +176,19 @@ export function StatusBar({
             {time}
           </span>
           {/* Ghost panel toggle with badge */}
+          {onResearchPanelToggle && (
+            <button
+              onClick={onResearchPanelToggle}
+              className={`touch-target p-1.5 rounded-sm transition-all duration-200 ${
+                isResearchPanelOpen
+                  ? "bg-primary/20 text-primary shadow-[inset_0_1px_2px_rgba(0,0,0,0.2)]"
+                  : "hover:bg-secondary text-muted-foreground/50 hover:text-foreground"
+              }`}
+              title="Research toolkit (PDF, Excel, finance, citations)"
+            >
+              <FlaskConical className="h-4 w-4" />
+            </button>
+          )}
           <button
             onClick={onGhostPanelToggle}
             className={`touch-target relative p-1.5 rounded-sm transition-all duration-200 ${

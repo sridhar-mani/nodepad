@@ -9,6 +9,8 @@ import { GraphDetailPanel } from "./graph-detail-panel"
 import { useModKey } from "@/lib/utils"
 import type { KnowledgeDocument } from "@/lib/knowledge-base"
 import { buildKnowledgeGraphLinks, kbDocNodeId, type KnowledgeGraphLink } from "@/lib/knowledge-graph"
+import { capBlocksForDisplay } from "@/lib/cap-blocks"
+import { usePerformanceProfile } from "@/lib/use-performance-profile"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -243,6 +245,20 @@ export function GraphArea({
   onHighlight,
 }: GraphAreaProps) {
   const mod = useModKey()
+  const perf = usePerformanceProfile()
+  const perfRef = React.useRef(perf)
+  perfRef.current = perf
+
+  const graphBlocks = React.useMemo(
+    () => capBlocksForDisplay(blocks, perf.graphMaxBlocks),
+    [blocks, perf.graphMaxBlocks],
+  )
+
+  const graphDocuments = React.useMemo(() => {
+    if (perf.tier !== "mobile" || knowledgeDocuments.length <= 12) return knowledgeDocuments
+    return knowledgeDocuments.slice(0, 12)
+  }, [knowledgeDocuments, perf.tier])
+
   const containerRef = React.useRef<HTMLDivElement>(null)
   const svgRef       = React.useRef<SVGSVGElement>(null)
   const simRef       = React.useRef<d3.Simulation<SimNode, SimLink> | null>(null)
@@ -263,26 +279,36 @@ export function GraphArea({
   const draggedNode = React.useRef<SimNode | null>(null)
 
   const knowledgeLinks = React.useMemo(
-    () => buildKnowledgeGraphLinks(blocks, knowledgeDocuments),
-    [blocks, knowledgeDocuments],
+    () => buildKnowledgeGraphLinks(graphBlocks, graphDocuments),
+    [graphBlocks, graphDocuments],
   )
+
+  const lastTickRef = React.useRef(0)
 
   // ── Container size ───────────────────────────────────────────────────────
   React.useEffect(() => {
     if (!containerRef.current) return
-    const obs = new ResizeObserver(e => {
-      const { width, height } = e[0].contentRect
-      dimsRef.current = { w: width, h: height }
-      setDims({ w: width, h: height })
+    let raf = 0
+    const obs = new ResizeObserver((e) => {
+      cancelAnimationFrame(raf)
+      raf = requestAnimationFrame(() => {
+        const { width, height } = e[0].contentRect
+        dimsRef.current = { w: width, h: height }
+        setDims({ w: width, h: height })
+      })
     })
     obs.observe(containerRef.current)
-    return () => obs.disconnect()
+    return () => {
+      cancelAnimationFrame(raf)
+      obs.disconnect()
+    }
   }, [])
 
   React.useEffect(() => { dimsRef.current = dims }, [dims])
 
   // ── Init simulation once ─────────────────────────────────────────────────
   React.useEffect(() => {
+    const p = perfRef.current
     simRef.current = d3
       .forceSimulation<SimNode>([])
       .force("link",
@@ -293,12 +319,37 @@ export function GraphArea({
       )
       .force("charge",  d3.forceManyBody<SimNode>().strength(n => n.isSynthesis ? -700 : -420))
       .force("collide", d3.forceCollide<SimNode>().radius(n => calcR(n.degree, 1) + 30).strength(0.88))
-      .alphaDecay(0.012)
+      .alphaDecay(p.graphAlphaDecay)
       .velocityDecay(0.38)
-      .on("tick", () => forceUpdate())
+      .on("tick", () => {
+        const throttle = perfRef.current.graphTickThrottleMs
+        if (throttle > 0) {
+          const now = performance.now()
+          if (now - lastTickRef.current < throttle) return
+          lastTickRef.current = now
+        }
+        forceUpdate()
+      })
       .stop()
     return () => { simRef.current?.stop() }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  React.useEffect(() => {
+    const sim = simRef.current
+    if (!sim) return
+    sim.alphaDecay(perf.graphAlphaDecay)
+  }, [perf.graphAlphaDecay])
+
+  React.useEffect(() => {
+    const onVis = () => {
+      const sim = simRef.current
+      if (!sim) return
+      if (document.hidden) sim.stop()
+      else sim.alpha(0.25).restart()
+    }
+    document.addEventListener("visibilitychange", onVis)
+    return () => document.removeEventListener("visibilitychange", onVis)
+  }, [])
 
   // ── Rebuild graph when data changes ─────────────────────────────────────
   React.useEffect(() => {
@@ -309,14 +360,14 @@ export function GraphArea({
     const cy = h / 2
     const outerR = Math.min(w, h) * 0.43
 
-    const deg    = calcDegrees(blocks, ghostNote, knowledgeLinks)
+    const deg    = calcDegrees(graphBlocks, ghostNote, knowledgeLinks)
     const maxDeg = Math.max(...deg.values(), 1)
 
     const prevBlockCount = nodesRef.current.filter(n => !n.isSynthesis && !n.isKnowledgeDoc).length
     const { nodes, links } = buildGraph(
-      blocks,
+      graphBlocks,
       ghostNote,
-      knowledgeDocuments,
+      graphDocuments,
       knowledgeLinks,
       cx,
       cy,
@@ -348,9 +399,9 @@ export function GraphArea({
     sim.nodes(nodesRef.current)
     ;(sim.force("link") as d3.ForceLink<SimNode, SimLink>).links(linksRef.current)
 
-    const isNew = blocks.length > prevBlockCount
-    sim.alpha(isNew ? 0.45 : 0.20).restart()
-  }, [blocks, ghostNote, knowledgeDocuments, knowledgeLinks]) // eslint-disable-line react-hooks/exhaustive-deps
+    const isNew = graphBlocks.length > prevBlockCount
+    sim.alpha(isNew ? 0.4 : 0.18).restart()
+  }, [graphBlocks, ghostNote, graphDocuments, knowledgeLinks]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Re-anchor radial centre on resize ────────────────────────────────────
   React.useEffect(() => {
@@ -359,7 +410,7 @@ export function GraphArea({
     const cx = dims.w / 2
     const cy = dims.h / 2
     const outerR = Math.min(dims.w, dims.h) * 0.43
-    const deg    = calcDegrees(blocks, ghostNote, knowledgeLinks)
+    const deg    = calcDegrees(graphBlocks, ghostNote, knowledgeLinks)
     const maxDeg = Math.max(...deg.values(), 1)
     sim.force("radial",
       d3.forceRadial<SimNode>(

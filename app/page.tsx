@@ -28,9 +28,14 @@ import {
 } from "@/lib/project-storage"
 import {
   isLikelyTextFile,
+  isLikelyImportableFile,
   mergeKnowledgeDocs,
   type KnowledgeDocument,
 } from "@/lib/knowledge-base"
+import { ingestResearchFiles } from "@/lib/research/ingest"
+import { fetchStockQuote, formatQuoteNote } from "@/lib/research/finance-client"
+import { formatCitation } from "@/lib/research/citations"
+import { ResearchToolkitPanel } from "@/components/research-toolkit-panel"
 import { findKnowledgeGapSuggestions } from "@/lib/knowledge-graph"
 import { normalizeConfidencePercent } from "@/lib/confidence"
 import { applySchedulePatch, type SchedulePatch } from "@/lib/scheduling"
@@ -40,6 +45,9 @@ import { PanelBackdrop } from "@/components/panel-backdrop"
 import { ViewModeBar } from "@/components/view-mode-bar"
 import { AiKeyBanner } from "@/components/ai-key-banner"
 import { useViewport } from "@/lib/use-viewport"
+import { usePerformanceProfile } from "@/lib/use-performance-profile"
+import { capBlocksForDisplay } from "@/lib/cap-blocks"
+import { fetchEnrichMemories } from "@/lib/enrich-memory"
 import {
   buildKnowledgeDocumentsFromFilesInWorker,
   findKnowledgeMatchesInWorker,
@@ -48,10 +56,7 @@ import {
 import {
   rememberNoteMemory,
   rememberPreferenceMemory,
-  retrieveMemoriesViaLangGraph,
-  retrievePreferenceMemories,
   saveAgentCheckpoint,
-  tryRetrieveLettaMemories,
 } from "@/lib/agent-memory"
 
 function generateId() {
@@ -90,6 +95,7 @@ export default function Page() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
   const [isIndexOpen, setIsIndexOpen] = useState(false)
   const [isGhostPanelOpen, setIsGhostPanelOpen] = useState(false)
+  const [isResearchPanelOpen, setIsResearchPanelOpen] = useState(false)
   const [viewMode, setViewMode] = useState<"tiling" | "kanban" | "graph">("tiling")
   const [isCommandKOpen, setIsCommandKOpen] = useState(false)
   const [jumpToSettings, setJumpToSettings] = useState(false)
@@ -100,7 +106,10 @@ export default function Page() {
   const providerPreset = getPreset(settings.provider)
   const aiReady = settings.provider === "ollama" || Boolean(settings.apiKey)
   const debounceTimers = useRef<Record<string, Record<string, NodeJS.Timeout>>>({})
-  const { isCompact, isMobile, isTablet } = useViewport()
+  const { isCompact, isMobile, isTablet, tier } = useViewport()
+  const perf = usePerformanceProfile()
+  const perfRef = useRef(perf)
+  perfRef.current = perf
 
   // ── Undo history ring (max 20 block snapshots per project) ───────────────
   const blockHistoryRef = useRef<Record<string, TextBlock[][]>>({})
@@ -160,15 +169,21 @@ export default function Page() {
   const blocks = activeProject?.blocks || []
   const ghostNotes = activeProject?.ghostNotes || []
 
-  const knowledgeGapSuggestions = useMemo(
-    () => findKnowledgeGapSuggestions(blocks, activeProject?.knowledgeDocuments ?? [], 4),
-    [blocks, activeProject?.knowledgeDocuments],
-  )
+  const knowledgeGapSuggestions = useMemo(() => {
+    if (perf.knowledgeGapLimit === 0) return []
+    const scoped = capBlocksForDisplay(blocks, perf.knowledgeGapMaxBlocks)
+    return findKnowledgeGapSuggestions(
+      scoped,
+      activeProject?.knowledgeDocuments ?? [],
+      perf.knowledgeGapLimit,
+    )
+  }, [blocks, activeProject?.knowledgeDocuments, perf.knowledgeGapLimit, perf.knowledgeGapMaxBlocks])
 
   const closeOverlayPanels = useCallback(() => {
     setIsSidebarOpen(false)
     setIsIndexOpen(false)
     setIsGhostPanelOpen(false)
+    setIsResearchPanelOpen(false)
   }, [])
 
   const toggleSidebar = useCallback(() => {
@@ -177,6 +192,7 @@ export default function Page() {
       if (next && isCompact) {
         setIsIndexOpen(false)
         setIsGhostPanelOpen(false)
+        setIsResearchPanelOpen(false)
       }
       return next
     })
@@ -188,6 +204,7 @@ export default function Page() {
       if (next && isCompact) {
         setIsSidebarOpen(false)
         setIsGhostPanelOpen(false)
+        setIsResearchPanelOpen(false)
       }
       return next
     })
@@ -199,6 +216,19 @@ export default function Page() {
       if (next && isCompact) {
         setIsSidebarOpen(false)
         setIsIndexOpen(false)
+        setIsResearchPanelOpen(false)
+      }
+      return next
+    })
+  }, [isCompact])
+
+  const toggleResearchPanel = useCallback(() => {
+    setIsResearchPanelOpen((open) => {
+      const next = !open
+      if (next && isCompact) {
+        setIsSidebarOpen(false)
+        setIsIndexOpen(false)
+        setIsGhostPanelOpen(false)
       }
       return next
     })
@@ -363,29 +393,40 @@ export default function Page() {
     })
   }, [projects, activeProjectId, isLoaded])
 
-  // 3. Silent rolling backup — written on every change, separate key.
-  //    If nodepad-projects is ever wiped, the load effect can fall back to this.
+  // 3. Silent rolling backup — debounced on phone/tablet to reduce IndexedDB churn.
   useEffect(() => {
     if (!isLoaded || projects.length === 0) return
-    saveWorkspaceBackupToIndexedDB(projects).catch(() => {
-      // Quota or IndexedDB unavailability; skip silently.
-    })
-  }, [projects, isLoaded])
+    const save = () => saveWorkspaceBackupToIndexedDB(projects).catch(() => {})
+    if (perf.backupDebounceMs <= 0) {
+      save()
+      return
+    }
+    const t = window.setTimeout(save, perf.backupDebounceMs)
+    return () => clearTimeout(t)
+  }, [projects, isLoaded, perf.backupDebounceMs])
 
-  // 4. Agent checkpointing: keeps compact recoverable snapshots per project.
+  // 4. Agent checkpointing — debounced + smaller slice on compact viewports.
   useEffect(() => {
     if (!isLoaded || !activeProjectId) return
     const active = projects.find((p) => p.id === activeProjectId)
     if (!active) return
 
-    saveAgentCheckpoint(activeProjectId, {
-      activeProjectId,
-      projectName: active.name,
-      blocks: active.blocks.slice(-120),
-      collapsedIds: active.collapsedIds,
-      ghostNotes: active.ghostNotes.slice(-8),
-    }).catch(() => {})
-  }, [projects, activeProjectId, isLoaded])
+    const save = () => {
+      saveAgentCheckpoint(activeProjectId, {
+        activeProjectId,
+        projectName: active.name,
+        blocks: active.blocks.slice(-perf.checkpointBlockCap),
+        collapsedIds: active.collapsedIds,
+        ghostNotes: active.ghostNotes.slice(-8),
+      }).catch(() => {})
+    }
+    if (perf.checkpointDebounceMs <= 0) {
+      save()
+      return
+    }
+    const t = window.setTimeout(save, perf.checkpointDebounceMs)
+    return () => clearTimeout(t)
+  }, [projects, activeProjectId, isLoaded, perf.checkpointDebounceMs, perf.checkpointBlockCap])
 
   // Persist user preference signals for agent memory retrieval.
   useEffect(() => {
@@ -519,13 +560,12 @@ export default function Page() {
 
     try {
       const curated = buildGhostContext(enrichedBlocks)
-      const memoryContext = await retrieveMemoriesViaLangGraph(
+      const ghostQuery = curated.map((b) => b.text).join("\n").slice(0, 2000)
+      const { memoryContext, preferenceMemories, lettaMemories } = await fetchEnrichMemories(
         projectId,
-        curated.map((b) => b.text).join("\n"),
-        3,
+        ghostQuery,
+        { ...perfRef.current, enrichMemoryLimit: perfRef.current.ghostMemoryLimit },
       )
-      const lettaMemories = await tryRetrieveLettaMemories(curated.map((b) => b.text).join("\n"))
-      const preferenceMemories = await retrievePreferenceMemories(2)
 
       const context = [
         ...curated.map(b => ({
@@ -554,9 +594,9 @@ export default function Page() {
       const previousSyntheses = (targetProject.lastGhostTexts || []).slice(-5)
 
       const kbHints = findKnowledgeGapSuggestions(
-        enrichedBlocks,
+        capBlocksForDisplay(enrichedBlocks, perfRef.current.knowledgeGapMaxBlocks),
         targetProject.knowledgeDocuments ?? [],
-        3,
+        perfRef.current.knowledgeGapLimit,
       ).map(
         (g) =>
           `Note "${g.blockPreview}…" may relate to "${g.docTitle}": ${g.snippet.slice(0, 120)}`,
@@ -600,13 +640,13 @@ export default function Page() {
         category: b.category,
         annotation: b.annotation,
       }))
-      .slice(-15)
+      .slice(-perfRef.current.enrichContextBlocks)
 
-    const [memoryContext, preferenceMemories, lettaMemories] = await Promise.all([
-      retrieveMemoriesViaLangGraph(projectId, text, 5),
-      retrievePreferenceMemories(3),
-      tryRetrieveLettaMemories(text),
-    ])
+    const { memoryContext, preferenceMemories, lettaMemories } = await fetchEnrichMemories(
+      projectId,
+      text,
+      perfRef.current,
+    )
     const memoryAsContext = memoryContext.map((m, idx) => ({
       id: `memory-${idx}`,
       text: `[Memory] ${m.text}`,
@@ -634,7 +674,7 @@ export default function Page() {
     const knowledgeMatches = await findKnowledgeMatchesInWorker(
       text,
       targetProject.knowledgeDocuments ?? [],
-      4,
+      perfRef.current.kbMatchLimit,
     )
 
     try {
@@ -944,27 +984,19 @@ export default function Page() {
     addBlock(refText, "reference")
   }, [addBlock])
 
-  const addKnowledgeFiles = useCallback(async (files: File[]) => {
-    const candidates = files.filter(isLikelyTextFile)
-    if (candidates.length === 0) return
-
-    let built: KnowledgeDocument[] = []
-    try {
-      built = await buildKnowledgeDocumentsFromFilesInWorker(candidates)
-      built = built.filter(doc => doc.rawText.trim())
-    } catch {
-      built = []
-    }
-    if (built.length === 0) return
-
+  const appendKnowledgeImport = useCallback((
+    docs: KnowledgeDocument[],
+    previewBodies: string[],
+  ) => {
+    if (docs.length === 0) return
     const now = Date.now()
     setProjects(current => current.map(p => {
       if (p.id !== activeProjectId) return p
 
-      const mergedDocs = mergeKnowledgeDocs(p.knowledgeDocuments ?? [], built)
-      const appendedNotes: TextBlock[] = built.map((doc, idx) => ({
+      const mergedDocs = mergeKnowledgeDocs(p.knowledgeDocuments ?? [], docs)
+      const appendedNotes: TextBlock[] = docs.map((doc, idx) => ({
         id: generateId(),
-        text: `Knowledge: ${doc.title}\n\n${doc.rawText.slice(0, 420)}${doc.rawText.length > 420 ? "…" : ""}`,
+        text: previewBodies[idx] ?? `Knowledge: ${doc.title}`,
         timestamp: now + idx,
         contentType: "reference",
         category: "Knowledge Base",
@@ -982,6 +1014,52 @@ export default function Page() {
       }
     }))
   }, [activeProjectId])
+
+  const addKnowledgeFiles = useCallback(async (files: File[]) => {
+    const importable = files.filter(isLikelyImportableFile)
+    if (importable.length === 0) return
+
+    const textFiles = importable.filter(isLikelyTextFile)
+    const binaryFiles = importable.filter(f => !isLikelyTextFile(f))
+
+    let built: KnowledgeDocument[] = []
+    const previews: string[] = []
+
+    if (textFiles.length > 0) {
+      try {
+        const fromWorker = await buildKnowledgeDocumentsFromFilesInWorker(textFiles)
+        for (const doc of fromWorker.filter(d => d.rawText.trim())) {
+          built.push(doc)
+          previews.push(
+            `Knowledge: ${doc.title}\n\n${doc.rawText.slice(0, 420)}${doc.rawText.length > 420 ? "…" : ""}`,
+          )
+        }
+      } catch {
+        // fall through — binary ingest may still succeed
+      }
+    }
+
+    if (binaryFiles.length > 0) {
+      const ingested = await ingestResearchFiles(binaryFiles, tier)
+      for (const item of ingested) {
+        built.push(item.document)
+        previews.push(item.previewNote)
+      }
+    }
+
+    appendKnowledgeImport(built, previews)
+  }, [activeProjectId, tier, appendKnowledgeImport])
+
+  const importResearchDocuments = useCallback((
+    docs: KnowledgeDocument[],
+    previewNotes: string[],
+  ) => {
+    appendKnowledgeImport(docs, previewNotes)
+  }, [appendKnowledgeImport])
+
+  const addResearchNote = useCallback((markdown: string) => {
+    addBlock(markdown, "reference")
+  }, [addBlock])
 
   const deleteBlock = useCallback((id: string) => {
     pushHistory(activeProjectId, blocksRef.current)
@@ -1179,7 +1257,37 @@ export default function Page() {
     } else if (cmd === "open-synthesis") {
       setIsSidebarOpen(false)
       setIsIndexOpen(false)
+      setIsResearchPanelOpen(false)
       setIsGhostPanelOpen(prev => !prev)
+    } else if (cmd === "open-research" || cmd === "research") {
+      setIsSidebarOpen(false)
+      setIsIndexOpen(false)
+      setIsGhostPanelOpen(false)
+      setIsResearchPanelOpen(prev => !prev)
+    } else if (cmd === "finance" && text?.trim()) {
+      void (async () => {
+        try {
+          const q = await fetchStockQuote(text.trim())
+          addBlock(formatQuoteNote(q), "reference")
+        } catch (e) {
+          addBlock(
+            `Finance lookup failed: ${e instanceof Error ? e.message : "unknown error"}`,
+            "reference",
+          )
+        }
+      })()
+    } else if (cmd === "cite" && text?.trim()) {
+      void (async () => {
+        try {
+          const formatted = await formatCitation(text.trim())
+          addBlock(`## Citation\n\n${formatted}`, "reference")
+        } catch (e) {
+          addBlock(
+            `Citation failed: ${e instanceof Error ? e.message : "unknown error"}`,
+            "reference",
+          )
+        }
+      })()
     } else if (cmd === "clear") clearBlocks()
     else if (cmd === "help") window.open("https://github.com/albingroen/react-cmdk", "_blank")
     
@@ -1221,10 +1329,10 @@ export default function Page() {
     else if (cmd === "thesis" && text) addBlock(text, "thesis")
     
     setIsCommandKOpen(false)
-  }, [clearBlocks, addBlock, activeProjectId])
+  }, [clearBlocks, addBlock, activeProjectId, createProject])
 
   const showPanelBackdrop =
-    isCompact && (isSidebarOpen || isIndexOpen || isGhostPanelOpen)
+    isCompact && (isSidebarOpen || isIndexOpen || isGhostPanelOpen || isResearchPanelOpen)
 
   return (
     <div className="flex h-dvh overflow-hidden bg-background">
@@ -1271,6 +1379,8 @@ export default function Page() {
           onMenuClick={toggleSidebar}
           onIndexToggle={toggleIndex}
           onGhostPanelToggle={toggleGhostPanel}
+          isResearchPanelOpen={isResearchPanelOpen}
+          onResearchPanelToggle={toggleResearchPanel}
           compact={isCompact}
           modelLabel={isHydrated && aiReady ? currentModel.shortLabel : undefined}
           showHelpTooltip={showHelpTooltip}
@@ -1360,6 +1470,14 @@ export default function Page() {
             onClaim={claimGhostNote}
             onAddKnowledgeSuggestion={(text) => addBlock(text, "reference")}
             onDismiss={dismissGhostNote}
+          />
+
+          <ResearchToolkitPanel
+            isOpen={isResearchPanelOpen}
+            onClose={() => setIsResearchPanelOpen(false)}
+            tier={tier}
+            onImportDocuments={importResearchDocuments}
+            onAddResearchNote={addResearchNote}
           />
         </div>
 

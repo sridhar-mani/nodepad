@@ -45,7 +45,8 @@ const nextConfig = {
             key: "Content-Security-Policy",
             value: [
               "default-src 'self'",
-              "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cloud.umami.is https://pagead2.googlesyndication.com https://www.googletagmanager.com https://www.google.com https://adservice.google.com https://cdn.propellerads.com",
+              "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cloud.umami.is https://pagead2.googlesyndication.com https://www.googletagmanager.com https://www.google.com https://adservice.google.com https://cdn.propellerads.com https://unpkg.com",
+              "worker-src 'self' blob: https://unpkg.com",
               "style-src 'self' 'unsafe-inline'",
               // Allow all HTTPS so user-configured custom base URLs (arbitrary
               // OpenAI-compatible endpoints) are not blocked by CSP. Enumerating

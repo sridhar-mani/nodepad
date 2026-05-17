@@ -1,12 +1,13 @@
 "use client"
 
-import { useEffect } from "react"
+import { useEffect, useRef } from "react"
 import type { TextBlock } from "@/components/tile-card"
 import { updateAppBadge } from "@/lib/pwa/badge"
 import { drainShareQueue, sharePayloadToNoteText } from "@/lib/pwa/share"
 import { writeWorkspaceToOpfs } from "@/lib/pwa/opfs"
 import { pushWorkspaceToEdge, registerBackgroundSync } from "@/lib/pwa/edge-sync"
 import { collectDueReminders } from "@/lib/scheduling"
+import { usePerformanceProfile } from "@/lib/use-performance-profile"
 
 interface PwaRuntimeProps {
   projects: Array<{ id: string; name: string; blocks: TextBlock[] }>
@@ -16,6 +17,10 @@ interface PwaRuntimeProps {
 }
 
 export function PwaRuntime({ projects, isLoaded, onShortcut, onShareNote }: PwaRuntimeProps) {
+  const perf = usePerformanceProfile()
+  const projectsRef = useRef(projects)
+  projectsRef.current = projects
+
   useEffect(() => {
     if (!isLoaded) return
     const params = new URLSearchParams(window.location.search)
@@ -51,23 +56,44 @@ export function PwaRuntime({ projects, isLoaded, onShortcut, onShareNote }: PwaR
 
   useEffect(() => {
     if (!isLoaded) return
-    const pendingTasks = projects.reduce((n, p) => {
-      return (
-        n +
-        p.blocks.filter((b) => b.contentType === "task" && !b.isEnriching).length +
-        collectDueReminders([p]).length
-      )
-    }, 0)
-    void updateAppBadge(pendingTasks)
-  }, [projects, isLoaded])
+    let cancelled = false
+    const run = () => {
+      if (cancelled) return
+      const pendingTasks = projectsRef.current.reduce((n, p) => {
+        return (
+          n +
+          p.blocks.filter((b) => b.contentType === "task" && !b.isEnriching).length +
+          collectDueReminders([p]).length
+        )
+      }, 0)
+      void updateAppBadge(pendingTasks)
+    }
+    run()
+    const id = window.setInterval(run, perf.reminderIntervalMs)
+    return () => {
+      cancelled = true
+      clearInterval(id)
+    }
+  }, [isLoaded, perf.reminderIntervalMs])
 
   useEffect(() => {
     if (!isLoaded) return
-    const snapshot = { projects, ts: Date.now() }
-    void writeWorkspaceToOpfs(snapshot)
-    void pushWorkspaceToEdge(snapshot)
-    void registerBackgroundSync()
-  }, [projects, isLoaded])
+    const delay = perf.opfsDebounceMs
+    const run = () => {
+      const snapshot = { projects: projectsRef.current, ts: Date.now() }
+      void writeWorkspaceToOpfs(snapshot)
+      if (!perf.skipEdgeSync) {
+        void pushWorkspaceToEdge(snapshot)
+        void registerBackgroundSync()
+      }
+    }
+    if (delay <= 0) {
+      run()
+      return
+    }
+    const t = window.setTimeout(run, delay)
+    return () => clearTimeout(t)
+  }, [projects, isLoaded, perf.opfsDebounceMs, perf.skipEdgeSync])
 
   return null
 }
