@@ -62,6 +62,7 @@ export default function RootLayout({
             __html: `(function(){try{var t=localStorage.getItem('theme');var d=document.documentElement;d.classList.remove('dark','light');if(t==='light'||t==='dark'){d.classList.add(t);}else{d.classList.add(window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');}}catch(e){document.documentElement.classList.add('dark');}})();`,
           }}
         />
+        <meta name="google-adsense-account" content="ca-pub-6792680346915397"></meta>
       </head>
       <body className={`font-sans antialiased ${vazirmatn.variable}`} suppressHydrationWarning>
         <MobileWall />
