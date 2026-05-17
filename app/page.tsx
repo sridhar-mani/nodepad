@@ -44,6 +44,14 @@ import {
   findKnowledgeMatchesInWorker,
   detectContentTypeInWorker,
 } from "@/lib/worker-client"
+import {
+  rememberNoteMemory,
+  rememberPreferenceMemory,
+  retrieveMemoriesViaLangGraph,
+  retrievePreferenceMemories,
+  saveAgentCheckpoint,
+  tryRetrieveLettaMemories,
+} from "@/lib/agent-memory"
 
 function generateId() {
   return Math.random().toString(36).substring(2, 10)
