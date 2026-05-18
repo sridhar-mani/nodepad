@@ -411,13 +411,14 @@ export default function Page() {
     if (!active) return
 
     const save = () => {
-      saveAgentCheckpoint(activeProjectId, {
+      const checkpointState = JSON.parse(JSON.stringify({
         activeProjectId,
         projectName: active.name,
         blocks: active.blocks.slice(-perf.checkpointBlockCap),
         collapsedIds: active.collapsedIds,
         ghostNotes: active.ghostNotes.slice(-8),
-      }).catch(() => {})
+      }))
+      saveAgentCheckpoint(activeProjectId, checkpointState).catch(() => {})
     }
     if (perf.checkpointDebounceMs <= 0) {
       save()
@@ -1387,6 +1388,8 @@ export default function Page() {
           onGhostPanelToggle={toggleGhostPanel}
           isResearchPanelOpen={isResearchPanelOpen}
           onResearchPanelToggle={toggleResearchPanel}
+          viewMode={viewMode}
+          onViewModeChange={setViewMode}
           compact={isCompact}
           modelLabel={isHydrated && aiReady ? currentModel.shortLabel : undefined}
           showHelpTooltip={showHelpTooltip}

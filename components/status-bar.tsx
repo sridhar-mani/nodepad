@@ -6,8 +6,9 @@ import { CONTENT_TYPE_CONFIG } from "@/lib/content-types"
 import type { TextBlock } from "@/components/tile-card"
 import { AboutPanel } from "@/components/about-panel"
 
-import { Menu, LayoutList, Sparkles, FlaskConical } from "lucide-react"
+import { Menu, LayoutList, Sparkles, FlaskConical, Grid, Trello, GitFork } from "lucide-react"
 import { PwaInstallButton } from "@/components/pwa-install-button"
+import type { ViewMode } from "@/components/view-mode-bar"
 
 interface StatusBarProps {
   blockCount: number
@@ -22,6 +23,8 @@ interface StatusBarProps {
   onIndexToggle: () => void
   onGhostPanelToggle: () => void
   onResearchPanelToggle?: () => void
+  viewMode?: ViewMode
+  onViewModeChange?: (mode: ViewMode) => void
   modelLabel?: string
   showHelpTooltip?: boolean
   onHelpTooltipDismiss?: () => void
@@ -41,6 +44,8 @@ export function StatusBar({
   onIndexToggle,
   onGhostPanelToggle,
   onResearchPanelToggle,
+  viewMode,
+  onViewModeChange,
   modelLabel,
   showHelpTooltip,
   onHelpTooltipDismiss,
@@ -163,6 +168,34 @@ export function StatusBar({
                 </div>
               </div>
             )}
+          </div>
+        )}
+        {onViewModeChange && viewMode && (
+          <div className="hidden lg:flex items-center gap-1 rounded-md bg-secondary/40 p-1">
+            {([
+              { id: "tiling" as const, label: "Tiling", icon: Grid },
+              { id: "kanban" as const, label: "Kanban", icon: Trello },
+              { id: "graph" as const, label: "Graph", icon: GitFork },
+            ]).map(({ id, label, icon: Icon }) => {
+              const active = viewMode === id
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => onViewModeChange(id)}
+                  className={`flex items-center gap-1.5 rounded-sm px-2 py-1 font-mono text-[9px] font-bold uppercase tracking-wider transition-colors ${
+                    active
+                      ? "bg-primary/15 text-primary shadow-[inset_0_1px_2px_rgba(0,0,0,0.08)]"
+                      : "text-muted-foreground hover:text-foreground hover:bg-secondary/60"
+                  }`}
+                  aria-pressed={active}
+                  title={`${label} view`}
+                >
+                  <Icon className="h-3.5 w-3.5" />
+                  <span>{label}</span>
+                </button>
+              )
+            })}
           </div>
         )}
         <div className="flex items-center gap-1.5 sm:gap-2 border-l border-border/40 pl-1.5 sm:pl-4 ml-0.5 sm:ml-4">

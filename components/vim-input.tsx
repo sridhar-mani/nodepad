@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from "framer-motion"
 import {
   Trello, Grid, Trash2, Clipboard, Download,
   FolderOpen, FolderPlus, BookOpen, Sparkles,
-  FolderDown, FolderInput, GitFork, Mic, MicOff, ImagePlus, FileText
+  FolderDown, FolderInput, GitFork, Mic, MicOff, ImagePlus, FileText, FlaskConical
 } from "lucide-react"
 import { Command } from "cmdk"
 import { useModKey } from "@/lib/utils"
@@ -540,6 +540,15 @@ export function VimInput({ onSubmit, onSubmitReferenceImage, onSubmitKnowledgeFi
             >
               <FileText className="h-3.5 w-3.5" />
               <span className="hidden sm:inline">Knowledge</span>
+            </button>
+
+            <button
+              onClick={() => onCommand("open-research")}
+              className="entry-bar-chip touch-target flex items-center gap-1.5 rounded px-2 py-1 font-mono text-[9px]"
+              title="Open research toolkit"
+            >
+              <FlaskConical className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">Research</span>
             </button>
 
             {speechSupported && (
