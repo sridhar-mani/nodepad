@@ -328,9 +328,6 @@ export function TilingArea({
             </div>
 
 
-            <div className="w-full max-w-sm pointer-events-auto hidden sm:block">
-              <AdSlot placement="empty" />
-            </div>
 
             <p className="text-[11px] sm:text-[13px] text-center text-foreground/65 uppercase tracking-wide text-balance max-w-[280px] sm:max-w-none leading-relaxed px-1">
               Type to capture · <span className="text-primary/80">#type</span> to classify · {mod}K commands

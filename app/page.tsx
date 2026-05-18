@@ -1540,7 +1540,6 @@ export default function Page() {
 
       <IntroModal open={isIntroOpen} onClose={handleIntroClose} />
 
-      <AdsRuntime anchorSuppressed={isCommandKOpen || isIntroOpen} />
     </div>
   )
 }
