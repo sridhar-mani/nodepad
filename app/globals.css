@@ -67,6 +67,14 @@
   --surface-elevated: oklch(1 0 0);
   --shimmer-body-dim: oklch(0.55 0 0);
   --shimmer-body-bright: oklch(0.25 0 0);
+  --z-base: 0;
+  --z-header: 20;
+  --z-chrome: 30;
+  --z-backdrop: 45;
+  --z-drawer: 50;
+  --z-toast: 55;
+  --z-modal: 200;
+  --mobile-chrome-h: 10.5rem;
 }
 
 .dark {
@@ -369,8 +377,16 @@
   justify-content: flex-end;
   gap: 0.375rem;
 }
+.entry-bar-compact .entry-bar {
+  padding-top: 0.5rem;
+  padding-bottom: 0.5rem;
+}
 .entry-bar-compact .entry-bar-actions .entry-bar-chip span:not(.sr-only) {
   display: none;
+}
+.entry-bar-compact .entry-bar-actions {
+  width: 100%;
+  justify-content: flex-end;
 }
 @media (max-width: 639px) {
   .entry-bar-compact .entry-bar-hint {
@@ -378,7 +394,59 @@
   }
 }
 
-/* Browser anchor ad — reserve space so entry bar is not covered */
-body.ads-anchor-active .app-main-column {
-  padding-bottom: calc(5.5rem + env(safe-area-inset-bottom, 0px));
+/* Mobile / tablet: reserve space for view bar + entry (main scroll area) */
+@media (max-width: 1023px) {
+  .app-workspace-scroll {
+    padding-bottom: calc(var(--mobile-chrome-h) + env(safe-area-inset-bottom, 0px));
+  }
+
+  .app-mobile-chrome {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: var(--z-chrome);
+    display: flex;
+    flex-direction: column;
+    background: var(--card);
+    border-top: 1px solid var(--border);
+    box-shadow: 0 -8px 32px -8px color-mix(in oklch, var(--foreground) 12%, transparent);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+
+  .app-main-column {
+    position: relative;
+    z-index: var(--z-base);
+    isolation: isolate;
+  }
+}
+
+@media (min-width: 1024px) {
+  .app-mobile-chrome {
+    position: relative;
+    z-index: var(--z-base);
+    flex-shrink: 0;
+  }
+}
+
+/* Drawers open: sink chrome below backdrop & panels */
+body.panel-overlay-open .app-mobile-chrome {
+  z-index: calc(var(--z-chrome) - 5);
+  pointer-events: none;
+  opacity: 0.35;
+  filter: saturate(0.85);
+}
+
+body.panel-overlay-open .command-palette-root {
+  display: none;
+}
+
+.z-header {
+  z-index: var(--z-header);
+}
+.z-drawer {
+  z-index: var(--z-drawer);
+}
+.z-backdrop {
+  z-index: var(--z-backdrop);
 }

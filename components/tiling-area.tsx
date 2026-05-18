@@ -5,7 +5,6 @@ import { TileCard, type TextBlock } from "@/components/tile-card"
 import { CONTENT_TYPE_CONFIG, type ContentType } from "@/lib/content-types"
 import { getRelatedIds, useModKey } from "@/lib/utils"
 import { TilingMinimap } from "./tiling-minimap"
-import { AdSlot } from "@/components/ad-slot"
 import { useViewport } from "@/lib/use-viewport"
 
 function pageSizeForTier(tier: "mobile" | "tablet" | "desktop") {

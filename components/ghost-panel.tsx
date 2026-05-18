@@ -37,7 +37,7 @@ export function GhostPanel({
         opacity: isOpen ? 1 : 0,
         visibility: isOpen ? "visible" : "hidden",
       }}
-      className="fixed inset-y-0 right-0 z-[51] flex flex-col h-[100dvh] w-[min(92vw,20rem)] sm:w-[min(88vw,17rem)] bg-card/95 backdrop-blur-3xl border-l border-border shrink-0 overflow-hidden transition-all duration-200 ease-in-out lg:static lg:z-auto lg:h-full lg:w-auto lg:bg-card/80"
+      className={`fixed inset-y-0 right-0 z-drawer flex flex-col h-[100dvh] w-[min(92vw,20rem)] sm:w-[min(88vw,17rem)] bg-card/95 backdrop-blur-3xl border-l border-border shrink-0 overflow-hidden transition-all duration-200 ease-in-out lg:static lg:z-auto lg:h-full lg:w-auto lg:bg-card/80 ${isOpen ? "pointer-events-auto" : "pointer-events-none"}`}
     >
       <div className="w-full lg:w-[272px] flex flex-col h-full">
         {/* Header */}

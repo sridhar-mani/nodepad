@@ -80,7 +80,7 @@ export function StatusBar({
   }, [blocks])
 
   return (
-    <header className="flex min-h-10 flex-wrap items-center justify-between gap-1.5 sm:gap-2 border-b border-border bg-card/80 px-2 sm:px-3 py-1.5 sm:py-2 backdrop-blur-md z-50 lg:h-10 lg:flex-nowrap lg:py-1.5">
+    <header className="z-header relative flex min-h-10 flex-wrap items-center justify-between gap-1.5 sm:gap-2 border-b border-border bg-card/80 px-2 sm:px-3 py-1.5 sm:py-2 backdrop-blur-md shrink-0 lg:h-10 lg:flex-nowrap lg:py-1.5">
       <div className="flex min-w-0 items-center gap-1.5">
         <button 
           onClick={onMenuClick}

@@ -28,9 +28,7 @@ import {
   saveNotificationPrefs,
 } from "@/lib/notifications"
 import { AdsPrefsRow } from "@/components/ads-prefs-sync"
-import { AdSlot } from "@/components/ad-slot"
 import { PwaInstallButton } from "@/components/pwa-install-button"
-import { setAdsHiddenByUser } from "@/lib/ads-config"
 import { PwaFeaturesPanel } from "@/components/pwa-features-panel"
 import {
   AI_PROVIDER_PRESETS,
@@ -263,7 +261,7 @@ export function ProjectSidebar({
         opacity: isOpen ? 1 : 0,
         visibility: isOpen ? "visible" : "hidden"
       }}
-      className="fixed inset-y-0 left-0 z-[52] transition-all duration-200 ease-in-out overflow-hidden border-r border-border bg-card/95 backdrop-blur-3xl flex flex-col h-[100dvh] w-[min(92vw,20rem)] sm:w-[min(88vw,17.5rem)] lg:static lg:z-auto lg:h-full lg:w-auto lg:bg-card/85"
+      className={`fixed inset-y-0 left-0 z-drawer transition-all duration-200 ease-in-out overflow-hidden border-r border-border bg-card/95 backdrop-blur-3xl flex flex-col h-[100dvh] w-[min(92vw,20rem)] sm:w-[min(88vw,17.5rem)] lg:static lg:z-auto lg:h-full lg:w-auto lg:bg-card/85 ${isOpen ? "pointer-events-auto" : "pointer-events-none"}`}
     >
       <div className="w-full lg:w-[240px] flex flex-col h-full">
         {/* Header */}
@@ -590,12 +588,6 @@ export function ProjectSidebar({
                 </div>
 
                 <AdsPrefsRow />
-
-                <AdSlot
-                  placement="feed"
-                  className="mt-1"
-                  onDismiss={() => setAdsHiddenByUser(true)}
-                />
 
                 <PwaFeaturesPanel
                   workspaceJson={workspaceJson}

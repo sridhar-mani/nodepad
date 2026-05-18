@@ -7,8 +7,6 @@ import {
   FolderInput, Download, Brain, Zap, Globe, Search
 } from "lucide-react"
 import { useModKey } from "@/lib/utils"
-import { AdSlot } from "@/components/ad-slot"
-import { setAdsHiddenByUser } from "@/lib/ads-config"
 
 interface AboutPanelProps {
   open: boolean
@@ -259,12 +257,6 @@ export function AboutPanel({ open, onClose }: AboutPanelProps) {
               ))}
             </ul>
           </Section>
-
-          <AdSlot
-            placement="about"
-            className="mb-4"
-            onDismiss={() => setAdsHiddenByUser(true)}
-          />
 
           {/* Footer */}
           <div className="pt-2 pb-4 border-t border-border">

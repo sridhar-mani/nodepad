@@ -268,20 +268,12 @@ export function ResearchToolkitPanel({
   return (
     <AnimatePresence>
       {isOpen && (
-        <>
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[115] bg-background/60 backdrop-blur-sm lg:hidden"
-            onClick={onClose}
-          />
           <motion.aside
             initial={{ x: "100%" }}
             animate={{ x: 0 }}
             exit={{ x: "100%" }}
             transition={{ type: "spring", damping: 28, stiffness: 320 }}
-            className="fixed right-0 top-0 z-[120] flex h-dvh w-full max-w-md lg:max-w-3xl flex-col border-l border-border bg-card shadow-2xl"
+            className="fixed inset-y-0 right-0 z-drawer flex h-[100dvh] w-full max-w-md lg:max-w-3xl flex-col border-l border-border bg-card/95 backdrop-blur-3xl shadow-2xl lg:static lg:z-auto lg:h-full lg:shadow-none"
           >
             <header className="flex items-center justify-between gap-2 border-b border-border px-4 py-3 shrink-0">
               <div className="min-w-0">
@@ -537,7 +529,6 @@ export function ResearchToolkitPanel({
               )}
             </div>
           </motion.aside>
-        </>
       )}
     </AnimatePresence>
   )

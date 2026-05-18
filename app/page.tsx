@@ -40,7 +40,6 @@ import { findKnowledgeGapSuggestions } from "@/lib/knowledge-graph"
 import { normalizeConfidencePercent } from "@/lib/confidence"
 import { applySchedulePatch, type SchedulePatch } from "@/lib/scheduling"
 import { ReminderEngine } from "@/components/reminder-engine"
-import { AdsRuntime } from "@/components/ads-runtime"
 import { PanelBackdrop } from "@/components/panel-backdrop"
 import { ViewModeBar } from "@/components/view-mode-bar"
 import { AiKeyBanner } from "@/components/ai-key-banner"
@@ -1334,6 +1333,13 @@ export default function Page() {
   const showPanelBackdrop =
     isCompact && (isSidebarOpen || isIndexOpen || isGhostPanelOpen || isResearchPanelOpen)
 
+  useEffect(() => {
+    if (typeof document === "undefined") return
+    document.body.classList.toggle("panel-overlay-open", showPanelBackdrop)
+    if (showPanelBackdrop) setIsCommandKOpen(false)
+    return () => document.body.classList.remove("panel-overlay-open")
+  }, [showPanelBackdrop, setIsCommandKOpen])
+
   return (
     <div className="flex h-dvh overflow-hidden bg-background">
       <PanelBackdrop visible={showPanelBackdrop} onClose={closeOverlayPanels} />
@@ -1401,8 +1407,8 @@ export default function Page() {
           />
         )}
 
-        <div className="flex flex-1 overflow-hidden relative min-h-0">
-          <main className="relative flex-1 overflow-hidden">
+        <div className="flex flex-1 overflow-hidden relative min-h-0 min-w-0">
+          <main className="app-workspace-scroll relative flex-1 min-w-0 overflow-auto overflow-x-hidden">
             {isLoaded ? (
               viewMode === "tiling" ? (
                 <TilingArea
@@ -1489,7 +1495,8 @@ export default function Page() {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 4 }}
               transition={{ duration: 0.15, ease: "easeOut" }}
-              className="absolute bottom-[72px] left-1/2 -translate-x-1/2 z-[130] pointer-events-none"
+              className="fixed left-1/2 -translate-x-1/2 pointer-events-none max-lg:bottom-[calc(var(--mobile-chrome-h)+0.5rem)] lg:absolute lg:bottom-20"
+              style={{ zIndex: "var(--z-toast)" }}
             >
               <div className="px-3 py-1.5 rounded-sm bg-popover border border-border backdrop-blur-md shadow-xl">
                 <span className="font-mono text-[10px] text-muted-foreground tracking-tight whitespace-nowrap">{undoToast}</span>
@@ -1498,17 +1505,19 @@ export default function Page() {
           )}
         </AnimatePresence>
 
-        <ViewModeBar value={viewMode} onChange={setViewMode} />
-
-        <VimInput
-          onSubmit={addBlock}
-          onSubmitReferenceImage={addReferenceImageBlock}
-          onSubmitKnowledgeFiles={addKnowledgeFiles}
-          onCommand={handleCommand}
-          isCommandKOpen={isCommandKOpen}
-          setIsCommandKOpen={setIsCommandKOpen}
-          compact={isCompact}
-        />
+        <footer className="app-mobile-chrome shrink-0">
+          <ViewModeBar value={viewMode} onChange={setViewMode} />
+          <VimInput
+            onSubmit={addBlock}
+            onSubmitReferenceImage={addReferenceImageBlock}
+            onSubmitKnowledgeFiles={addKnowledgeFiles}
+            onCommand={handleCommand}
+            isCommandKOpen={isCommandKOpen}
+            setIsCommandKOpen={setIsCommandKOpen}
+            compact={isCompact}
+            overlayOpen={showPanelBackdrop}
+          />
+        </footer>
       </div>
 
       <TileIndex 

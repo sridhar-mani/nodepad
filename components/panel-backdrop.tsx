@@ -8,7 +8,7 @@ interface PanelBackdropProps {
   zIndex?: number
 }
 
-export function PanelBackdrop({ visible, onClose, zIndex = 40 }: PanelBackdropProps) {
+export function PanelBackdrop({ visible, onClose, zIndex }: PanelBackdropProps) {
   return (
     <AnimatePresence>
       {visible && (
@@ -19,8 +19,8 @@ export function PanelBackdrop({ visible, onClose, zIndex = 40 }: PanelBackdropPr
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.15 }}
-          className="fixed inset-0 bg-background/55 backdrop-blur-[2px] lg:hidden"
-          style={{ zIndex }}
+          className="fixed inset-0 bg-background/55 backdrop-blur-[2px] lg:hidden z-backdrop"
+          style={zIndex != null ? { zIndex } : undefined}
           onClick={onClose}
         />
       )}

@@ -65,11 +65,13 @@ interface VimInputProps {
   isCommandKOpen: boolean
   setIsCommandKOpen: (open: boolean) => void
   compact?: boolean
+  /** When a drawer/backdrop is open on mobile — sink chrome below panels */
+  overlayOpen?: boolean
 }
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
-export function VimInput({ onSubmit, onSubmitReferenceImage, onSubmitKnowledgeFiles, onCommand, isCommandKOpen, setIsCommandKOpen, compact }: VimInputProps) {
+export function VimInput({ onSubmit, onSubmitReferenceImage, onSubmitKnowledgeFiles, onCommand, isCommandKOpen, setIsCommandKOpen, compact, overlayOpen }: VimInputProps) {
   const [value, setValue] = React.useState("")
   const [search, setSearch] = React.useState("")
   const [focusedIdx, setFocusedIdx] = React.useState(0)
@@ -335,7 +337,7 @@ export function VimInput({ onSubmit, onSubmitReferenceImage, onSubmitKnowledgeFi
   // ── Render ───────────────────────────────────────────────────────────────
 
   return (
-    <div className={`w-full relative z-[110] flex flex-col items-center ${compact ? "entry-bar-compact" : ""}`}>
+    <div className={`w-full relative flex flex-col items-center ${compact ? "entry-bar-compact" : ""} ${overlayOpen ? "max-lg:select-none" : ""}`}>
       <Command
         className="w-full"
         onKeyDown={(e) => {
@@ -348,13 +350,13 @@ export function VimInput({ onSubmit, onSubmitReferenceImage, onSubmitKnowledgeFi
       >
         {/* ── Command Popup ──────────────────────────────────────────────── */}
         <AnimatePresence>
-          {isCommandKOpen && (
+          {isCommandKOpen && !overlayOpen && (
             <motion.div
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 8 }}
               transition={{ duration: 0.15, ease: "easeOut" }}
-              className="command-palette absolute bottom-full left-0 right-0 w-full backdrop-blur-3xl shadow-[0_-24px_60px_-12px_rgba(0,0,0,0.15)]"
+              className="command-palette command-palette-root absolute bottom-full left-0 right-0 w-full backdrop-blur-3xl shadow-[0_-24px_60px_-12px_rgba(0,0,0,0.15)] max-h-[min(50vh,360px)] overflow-hidden"
               onKeyDown={handlePopupKeyDown}
             >
               {/* Search input */}
