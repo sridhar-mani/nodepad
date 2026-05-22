@@ -73,7 +73,7 @@ export async function ingestResearchFiles(
     const kind = getResearchFileKind(file)
     if (kind === "unknown") continue
     try {
-      const result = await ingestResearchFile(file, profile.tier)
+      const result = await ingestResearchFile(file, tier)
       if (result) results.push(result)
     } catch {
       // Skip files that fail parsing on this device.

@@ -36,6 +36,7 @@ import { ingestResearchFiles } from "@/lib/research/ingest"
 import { fetchStockQuote, formatQuoteNote } from "@/lib/research/finance-client"
 import { formatCitation } from "@/lib/research/citations"
 import { ResearchToolkitPanel } from "@/components/research-toolkit-panel"
+import { ImportPreviewPanel } from "@/components/import-preview-panel"
 import { findKnowledgeGapSuggestions } from "@/lib/knowledge-graph"
 import { normalizeConfidencePercent } from "@/lib/confidence"
 import { applySchedulePatch, type SchedulePatch } from "@/lib/scheduling"
@@ -95,6 +96,11 @@ export default function Page() {
   const [isIndexOpen, setIsIndexOpen] = useState(false)
   const [isGhostPanelOpen, setIsGhostPanelOpen] = useState(false)
   const [isResearchPanelOpen, setIsResearchPanelOpen] = useState(false)
+  const [pendingImport, setPendingImport] = useState<{
+    sourceLabel: string
+    docs: KnowledgeDocument[]
+    previews: string[]
+  } | null>(null)
   const [viewMode, setViewMode] = useState<"tiling" | "kanban" | "graph">("tiling")
   const [isCommandKOpen, setIsCommandKOpen] = useState(false)
   const [jumpToSettings, setJumpToSettings] = useState(false)
@@ -1015,6 +1021,25 @@ export default function Page() {
     }))
   }, [activeProjectId])
 
+  const stageKnowledgeImport = useCallback((
+    sourceLabel: string,
+    docs: KnowledgeDocument[],
+    previews: string[],
+  ) => {
+    if (docs.length === 0) return
+    setPendingImport({ sourceLabel, docs, previews })
+  }, [])
+
+  const confirmKnowledgeImport = useCallback(() => {
+    if (!pendingImport) return
+    appendKnowledgeImport(pendingImport.docs, pendingImport.previews)
+    setPendingImport(null)
+  }, [appendKnowledgeImport, pendingImport])
+
+  const cancelKnowledgeImport = useCallback(() => {
+    setPendingImport(null)
+  }, [])
+
   const addKnowledgeFiles = useCallback(async (files: File[]) => {
     const importable = files.filter(isLikelyImportableFile)
     if (importable.length === 0) return
@@ -1047,15 +1072,15 @@ export default function Page() {
       }
     }
 
-    appendKnowledgeImport(built, previews)
-  }, [activeProjectId, tier, appendKnowledgeImport])
+    stageKnowledgeImport("Knowledge files", built, previews)
+  }, [activeProjectId, tier, stageKnowledgeImport])
 
   const importResearchDocuments = useCallback((
     docs: KnowledgeDocument[],
     previewNotes: string[],
   ) => {
-    appendKnowledgeImport(docs, previewNotes)
-  }, [appendKnowledgeImport])
+    stageKnowledgeImport("Research toolkit", docs, previewNotes)
+  }, [stageKnowledgeImport])
 
   const addResearchNote = useCallback((markdown: string) => {
     addBlock(markdown, "reference")
@@ -1489,6 +1514,16 @@ export default function Page() {
             onAddResearchNote={addResearchNote}
           />
         </div>
+
+        <ImportPreviewPanel
+          open={pendingImport !== null}
+          sourceLabel={pendingImport?.sourceLabel ?? "Knowledge files"}
+          documents={pendingImport?.docs ?? []}
+          previewNotes={pendingImport?.previews ?? []}
+          isConfirming={false}
+          onCancel={cancelKnowledgeImport}
+          onConfirm={confirmKnowledgeImport}
+        />
 
         {/* Undo toast */}
         <AnimatePresence>
