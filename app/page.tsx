@@ -96,11 +96,25 @@ export default function Page() {
   const [isIndexOpen, setIsIndexOpen] = useState(false)
   const [isGhostPanelOpen, setIsGhostPanelOpen] = useState(false)
   const [isResearchPanelOpen, setIsResearchPanelOpen] = useState(false)
-  const [pendingImport, setPendingImport] = useState<{
-    sourceLabel: string
-    docs: KnowledgeDocument[]
-    previews: string[]
-  } | null>(null)
+  const [pendingImport, setPendingImport] = useState<
+    | {
+        kind: "knowledge"
+        sourceLabel: string
+        docs: KnowledgeDocument[]
+        previews: string[]
+      }
+    | {
+        kind: "project"
+        sourceLabel: string
+        project: Project
+      }
+    | {
+        kind: "note"
+        sourceLabel: string
+        text: string
+      }
+    | null
+  >(null)
   const [viewMode, setViewMode] = useState<"tiling" | "kanban" | "graph">("tiling")
   const [isCommandKOpen, setIsCommandKOpen] = useState(false)
   const [jumpToSettings, setJumpToSettings] = useState(false)
@@ -454,9 +468,7 @@ export default function Page() {
         const raw = ev.target?.result as string
         const names = projectsRef.current.map(p => p.name)
         const imported = parseNodepadFile(raw, names) as Project
-        setProjects(prev => [...prev, imported])
-        setActiveProjectId(imported.id)
-        setIsSidebarOpen(false)
+        setPendingImport({ kind: "project", sourceLabel: file.name, project: imported })
       } catch (err) {
         if (err instanceof NodepadParseError) {
           alert(err.message)
@@ -967,7 +979,9 @@ export default function Page() {
   }, [])
 
   const handleShareImport = useCallback((text: string) => {
-    if (text.trim()) addBlock(text.trim())
+    const trimmed = text.trim()
+    if (!trimmed) return
+    setPendingImport({ kind: "note", sourceLabel: "Shared text", text: trimmed })
   }, [addBlock])
 
   const handlePwaImportFile = useCallback((file: File) => {
@@ -976,8 +990,7 @@ export default function Page() {
       try {
         const names = projects.map((p) => p.name)
         const imported = parseNodepadFile(String(reader.result), names) as Project
-        setProjects((prev) => [...prev, imported])
-        setActiveProjectId(imported.id)
+        setPendingImport({ kind: "project", sourceLabel: file.name, project: imported })
       } catch (err) {
         console.error(err)
       }
@@ -1027,14 +1040,30 @@ export default function Page() {
     previews: string[],
   ) => {
     if (docs.length === 0) return
-    setPendingImport({ sourceLabel, docs, previews })
+    setPendingImport({ kind: "knowledge", sourceLabel, docs, previews })
   }, [])
 
   const confirmKnowledgeImport = useCallback(() => {
-    if (!pendingImport) return
+    if (!pendingImport || pendingImport.kind !== "knowledge") return
     appendKnowledgeImport(pendingImport.docs, pendingImport.previews)
     setPendingImport(null)
   }, [appendKnowledgeImport, pendingImport])
+
+  const confirmPendingImport = useCallback(() => {
+    if (!pendingImport) return
+
+    if (pendingImport.kind === "knowledge") {
+      appendKnowledgeImport(pendingImport.docs, pendingImport.previews)
+    } else if (pendingImport.kind === "project") {
+      setProjects((prev) => [...prev, pendingImport.project])
+      setActiveProjectId(pendingImport.project.id)
+      setIsSidebarOpen(false)
+    } else if (pendingImport.kind === "note") {
+      addBlock(pendingImport.text, "reference")
+    }
+
+    setPendingImport(null)
+  }, [addBlock, appendKnowledgeImport, pendingImport])
 
   const cancelKnowledgeImport = useCallback(() => {
     setPendingImport(null)
@@ -1518,11 +1547,20 @@ export default function Page() {
         <ImportPreviewPanel
           open={pendingImport !== null}
           sourceLabel={pendingImport?.sourceLabel ?? "Knowledge files"}
-          documents={pendingImport?.docs ?? []}
-          previewNotes={pendingImport?.previews ?? []}
+          mode={pendingImport?.kind ?? "knowledge"}
+          documents={pendingImport?.kind === "knowledge" ? pendingImport.docs : []}
+          previewNotes={pendingImport?.kind === "knowledge" ? pendingImport.previews : []}
+          noteText={pendingImport?.kind === "note" ? pendingImport.text : ""}
+          projectPreview={pendingImport?.kind === "project" ? {
+            name: pendingImport.project.name,
+            blocks: pendingImport.project.blocks.length,
+            knowledgeDocs: pendingImport.project.knowledgeDocuments?.length ?? 0,
+            ghostNotes: pendingImport.project.ghostNotes?.length ?? 0,
+            collapsed: pendingImport.project.collapsedIds.length,
+          } : undefined}
           isConfirming={false}
           onCancel={cancelKnowledgeImport}
-          onConfirm={confirmKnowledgeImport}
+          onConfirm={confirmPendingImport}
         />
 
         {/* Undo toast */}
